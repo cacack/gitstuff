@@ -112,17 +112,16 @@ jobs:
 
 
       - name: Create GitHub Release
-        uses: ncipollo/create-release@v1
+        uses: softprops/action-gh-release@v1
         with:
-          tag: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           name: GitStuff ${{ github.ref_name }}
-          bodyFile: release_notes.md
+          body_path: release_notes.md
           draft: false
           prerelease: false
-          artifacts: |
+          files: |
             dist/gitstuff-linux-amd64
             dist/gitstuff-linux-arm64
             dist/gitstuff-darwin-amd64
             dist/gitstuff-darwin-arm64
             dist/checksums.txt
-          token: ${{ secrets.GITHUB_TOKEN }}
