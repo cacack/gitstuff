@@ -7,7 +7,17 @@ linters-settings:
     local-prefixes: gitstuff
   
   govet:
-    check-shadowing: true
+    enable:
+      - shadow
+    disable:
+      - fieldalignment
+
+  gosec:
+    excludes:
+      - G402 # TLS InsecureSkipVerify set true (needed for self-signed certs)
+
+  staticcheck:
+    checks: ["all", "-SA1019"] # Ignore deprecated warnings from gitlab library
   
   revive:
     severity: warning
@@ -29,6 +39,7 @@ linters:
     - gosec
     - unconvert
     - unused
+    - staticcheck
   
   disable:
     - typecheck  # handled by go build
@@ -39,3 +50,8 @@ issues:
     - path: _test\.go
       linters:
         - gosec
+    
+    # Ignore deprecated gitlab library warnings - they're still functional
+    - path: internal/gitlab/
+      linters: [staticcheck]
+      text: "SA1019.*gitlab.*deprecated"

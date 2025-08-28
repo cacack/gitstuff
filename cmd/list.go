@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"gitstuff/internal/config"
 	"gitstuff/internal/git"
 	"gitstuff/internal/gitlab"
+
+	"github.com/spf13/cobra"
 )
 
 // GitLabClientInterface defines the methods we need from the GitLab client
@@ -36,16 +37,16 @@ func runList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w (run 'gitstuff config' first)", err)
 	}
-	
+
 	client, err := gitlab.NewClient(cfg.GitLab.URL, cfg.GitLab.Token, cfg.GitLab.Insecure)
 	if err != nil {
 		return err
 	}
-	
+
 	showTree, _ := cmd.Flags().GetBool("tree")
 	showStatus, _ := cmd.Flags().GetBool("status")
 	showVerbose, _ := cmd.Flags().GetBool("verbose")
-	
+
 	if showTree {
 		return displayRepositoryTree(client, cfg, showStatus, showVerbose)
 	} else {
@@ -58,16 +59,16 @@ func displayRepositoryList(client GitLabClientInterface, cfg *config.Config, sho
 	if err != nil {
 		return err
 	}
-	
+
 	fmt.Printf("Found %d repositories:\n\n", len(repos))
-	
+
 	for _, repo := range repos {
 		fmt.Printf("📁 %s\n", repo.FullPath)
-		
+
 		if showVerbose {
 			fmt.Printf("   URL: %s\n", repo.WebURL)
 		}
-		
+
 		if showStatus {
 			localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
 			status, err := git.GetRepositoryStatus(localPath)
@@ -77,10 +78,10 @@ func displayRepositoryList(client GitLabClientInterface, cfg *config.Config, sho
 				displayStatus(status)
 			}
 		}
-		
+
 		fmt.Print("\n")
 	}
-	
+
 	return nil
 }
 
@@ -89,18 +90,18 @@ func displayRepositoryTree(client GitLabClientInterface, cfg *config.Config, sho
 	if err != nil {
 		return err
 	}
-	
+
 	fmt.Println("Repository tree structure:")
-	
+
 	if len(tree.Repositories) > 0 {
 		fmt.Println("Root repositories:")
 		for _, repo := range tree.Repositories {
 			fmt.Printf("📁 %s\n", repo.Name)
-			
+
 			if showVerbose {
 				fmt.Printf("   URL: %s\n", repo.WebURL)
 			}
-			
+
 			if showStatus {
 				localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
 				status, err := git.GetRepositoryStatus(localPath)
@@ -113,26 +114,26 @@ func displayRepositoryTree(client GitLabClientInterface, cfg *config.Config, sho
 			fmt.Print("\n")
 		}
 	}
-	
+
 	for groupName, groupNode := range tree.Groups {
 		displayGroup(groupNode, 0, cfg, showStatus, showVerbose)
 		_ = groupName
 	}
-	
+
 	return nil
 }
 
 func displayGroup(group *gitlab.GroupNode, indent int, cfg *config.Config, showStatus, showVerbose bool) {
 	prefix := strings.Repeat("  ", indent)
 	fmt.Printf("%s📂 %s/\n", prefix, group.Group.Name)
-	
+
 	for _, repo := range group.Repositories {
 		fmt.Printf("%s  📁 %s\n", prefix, repo.Name)
-		
+
 		if showVerbose {
 			fmt.Printf("%s     URL: %s\n", prefix, repo.WebURL)
 		}
-		
+
 		if showStatus {
 			localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
 			status, err := git.GetRepositoryStatus(localPath)
@@ -145,7 +146,7 @@ func displayGroup(group *gitlab.GroupNode, indent int, cfg *config.Config, showS
 		}
 		fmt.Print("\n")
 	}
-	
+
 	for _, subGroup := range group.SubGroups {
 		displayGroup(subGroup, indent+1, cfg, showStatus, showVerbose)
 	}
@@ -156,12 +157,12 @@ func displayStatus(status *git.Status) {
 		fmt.Print("Status: ❌ Not cloned\n")
 		return
 	}
-	
+
 	if !status.IsGitRepo {
 		fmt.Print("Status: ⚠️  Directory exists but not a git repository\n")
 		return
 	}
-	
+
 	fmt.Printf("Status: ✅ Cloned")
 	if status.CurrentBranch != "" {
 		fmt.Printf(" (branch: %s)", status.CurrentBranch)

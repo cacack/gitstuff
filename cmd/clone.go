@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/spf13/cobra"
 	"gitstuff/internal/config"
 	"gitstuff/internal/git"
 	"gitstuff/internal/gitlab"
+
+	"github.com/spf13/cobra"
 )
 
 var cloneCmd = &cobra.Command{
@@ -30,20 +31,20 @@ func runClone(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w (run 'gitstuff config' first)", err)
 	}
-	
+
 	client, err := gitlab.NewClient(cfg.GitLab.URL, cfg.GitLab.Token, cfg.GitLab.Insecure)
 	if err != nil {
 		return err
 	}
-	
+
 	cloneAll, _ := cmd.Flags().GetBool("all")
 	useSSH, _ := cmd.Flags().GetBool("ssh")
 	update, _ := cmd.Flags().GetBool("update")
-	
+
 	if cloneAll || len(args) == 0 {
 		return cloneAllRepositories(client, cfg, useSSH, update)
 	}
-	
+
 	return cloneSingleRepository(client, cfg, args[0], useSSH, update)
 }
 
@@ -52,15 +53,15 @@ func cloneAllRepositories(client *gitlab.Client, cfg *config.Config, useSSH, upd
 	if err != nil {
 		return err
 	}
-	
+
 	fmt.Printf("Found %d repositories to clone/update\n\n", len(repos))
-	
+
 	successful := 0
 	failed := 0
-	
+
 	for i, repo := range repos {
 		fmt.Printf("[%d/%d] Processing %s...\n", i+1, len(repos), repo.FullPath)
-		
+
 		localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
 		status, err := git.GetRepositoryStatus(localPath)
 		if err != nil {
@@ -68,7 +69,7 @@ func cloneAllRepositories(client *gitlab.Client, cfg *config.Config, useSSH, upd
 			failed++
 			continue
 		}
-		
+
 		if status.Exists && status.IsGitRepo {
 			if update {
 				fmt.Printf("🔄 Pulling latest changes...\n")
@@ -85,12 +86,12 @@ func cloneAllRepositories(client *gitlab.Client, cfg *config.Config, useSSH, upd
 			}
 			continue
 		}
-		
+
 		cloneURL := repo.CloneURL
 		if useSSH {
 			cloneURL = repo.SSHCloneURL
 		}
-		
+
 		fmt.Printf("📥 Cloning from %s...\n", cloneURL)
 		if err := git.CloneRepository(cloneURL, localPath, useSSH); err != nil {
 			fmt.Printf("❌ Failed to clone: %v\n\n", err)
@@ -100,7 +101,7 @@ func cloneAllRepositories(client *gitlab.Client, cfg *config.Config, useSSH, upd
 			successful++
 		}
 	}
-	
+
 	fmt.Printf("Summary: %d successful, %d failed\n", successful, failed)
 	return nil
 }
@@ -110,15 +111,15 @@ func cloneSingleRepository(client *gitlab.Client, cfg *config.Config, repoPath s
 	if err != nil {
 		return err
 	}
-	
+
 	fmt.Printf("Processing repository: %s\n", repo.FullPath)
-	
+
 	localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
 	status, err := git.GetRepositoryStatus(localPath)
 	if err != nil {
 		return fmt.Errorf("error checking repository status: %w", err)
 	}
-	
+
 	if status.Exists && status.IsGitRepo {
 		if update {
 			fmt.Printf("🔄 Pulling latest changes...\n")
@@ -132,21 +133,21 @@ func cloneSingleRepository(client *gitlab.Client, cfg *config.Config, repoPath s
 		}
 		return nil
 	}
-	
+
 	if status.Exists && !status.IsGitRepo {
 		return fmt.Errorf("directory %s exists but is not a git repository", localPath)
 	}
-	
+
 	cloneURL := repo.CloneURL
 	if useSSH {
 		cloneURL = repo.SSHCloneURL
 	}
-	
+
 	fmt.Printf("📥 Cloning from %s to %s...\n", cloneURL, localPath)
 	if err := git.CloneRepository(cloneURL, localPath, useSSH); err != nil {
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
-	
+
 	fmt.Printf("✅ Repository cloned successfully\n")
 	return nil
 }

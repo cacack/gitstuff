@@ -5,7 +5,7 @@
 #   make test   - Run all tests
 #   make help   - Show all available commands
 
-.PHONY: build test test-verbose clean help install
+.PHONY: build test test-verbose lint clean help install
 
 # Default target
 help:
@@ -13,6 +13,7 @@ help:
 	@echo "  make build        - Build the gitstuff binary"
 	@echo "  make test         - Run all tests"
 	@echo "  make test-verbose - Run tests with verbose output"
+	@echo "  make lint         - Run golangci-lint"
 	@echo "  make clean        - Remove built binaries"
 	@echo "  make install      - Build and install to /usr/local/bin"
 	@echo "  make help         - Show this help message"
@@ -34,6 +35,16 @@ test:
 test-verbose:
 	@echo "Running all tests with verbose output..."
 	go test -v ./cmd ./internal/config ./internal/git ./internal/gitlab
+
+# Run golangci-lint
+lint:
+	@echo "Running golangci-lint..."
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest; \
+	fi
+	$$(go env GOPATH)/bin/golangci-lint run
+	@echo "✅ Linting complete!"
 
 # Clean built binaries
 clean:

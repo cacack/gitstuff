@@ -26,15 +26,15 @@ type LocalConfig struct {
 
 func Load() (*Config, error) {
 	var config Config
-	
+
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
-	
+
 	if config.GitLab.URL == "" || config.GitLab.Token == "" {
 		return nil, fmt.Errorf("gitlab url and token must be configured")
 	}
-	
+
 	if config.Local.BaseDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -42,7 +42,7 @@ func Load() (*Config, error) {
 		}
 		config.Local.BaseDir = filepath.Join(home, "gitlab-repos")
 	}
-	
+
 	return &config, nil
 }
 
@@ -51,11 +51,11 @@ func Create(gitlabURL, token, baseDir string, insecure bool) error {
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	
+
 	if baseDir == "" {
 		baseDir = filepath.Join(home, "gitlab-repos")
 	}
-	
+
 	config := Config{
 		GitLab: GitLabConfig{
 			URL:      gitlabURL,
@@ -66,19 +66,19 @@ func Create(gitlabURL, token, baseDir string, insecure bool) error {
 			BaseDir: baseDir,
 		},
 	}
-	
+
 	configPath := filepath.Join(home, ".gitstuff.yaml")
-	
+
 	data, err := yaml.Marshal(&config)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-	
+
 	err = os.WriteFile(configPath, data, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
-	
+
 	fmt.Printf("Configuration created at: %s\n", configPath)
 	return nil
 }

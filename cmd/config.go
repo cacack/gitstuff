@@ -7,8 +7,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/spf13/cobra"
 	"gitstuff/internal/config"
+
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
@@ -32,37 +33,37 @@ func runConfig(cmd *cobra.Command, args []string) error {
 	token, _ := cmd.Flags().GetString("token")
 	baseDir, _ := cmd.Flags().GetString("base-dir")
 	insecure, _ := cmd.Flags().GetBool("insecure")
-	
+
 	reader := bufio.NewReader(os.Stdin)
-	
+
 	if url == "" {
 		fmt.Print("GitLab URL (e.g., https://gitlab.com): ")
 		url, _ = reader.ReadString('\n')
 		url = strings.TrimSpace(url)
 	}
-	
+
 	if token == "" {
 		fmt.Print("GitLab Access Token: ")
-		tokenBytes, err := term.ReadPassword(int(syscall.Stdin))
+		tokenBytes, err := term.ReadPassword(syscall.Stdin)
 		if err != nil {
 			return fmt.Errorf("failed to read token: %w", err)
 		}
 		token = string(tokenBytes)
 		fmt.Println()
 	}
-	
+
 	if baseDir == "" {
 		fmt.Print("Base directory for repositories (default: ~/gitlab-repos): ")
 		baseDir, _ = reader.ReadString('\n')
 		baseDir = strings.TrimSpace(baseDir)
 	}
-	
+
 	if !insecure && !cmd.Flags().Changed("insecure") {
 		fmt.Print("Skip SSL certificate verification? (y/N): ")
 		response, _ := reader.ReadString('\n')
 		response = strings.ToLower(strings.TrimSpace(response))
 		insecure = response == "y" || response == "yes"
 	}
-	
+
 	return config.Create(url, token, baseDir, insecure)
 }

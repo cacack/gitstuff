@@ -22,7 +22,7 @@ func captureOutput(f func()) string {
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	_, _ = io.Copy(&buf, r)
 	return buf.String()
 }
 
@@ -33,7 +33,7 @@ func TestDisplayRepositoryList_WithoutVerbose(t *testing.T) {
 			BaseDir: "/tmp/test",
 		},
 	}
-	
+
 	// Create mock client with test data
 	repos := []*gitlab.Repository{
 		{
@@ -49,27 +49,27 @@ func TestDisplayRepositoryList_WithoutVerbose(t *testing.T) {
 			WebURL:   "https://gitlab.com/group/another-repo",
 		},
 	}
-	
+
 	mockClient := &mockGitLabClient{repos: repos}
-	
+
 	output := captureOutput(func() {
-		displayRepositoryList(mockClient, cfg, false, false) // showStatus=false, showVerbose=false
+		_ = displayRepositoryList(mockClient, cfg, false, false) // showStatus=false, showVerbose=false
 	})
-	
+
 	// Should contain repository names
 	if !strings.Contains(output, "group/test-repo") {
 		t.Errorf("Expected output to contain repository path 'group/test-repo'")
 	}
-	
+
 	if !strings.Contains(output, "group/another-repo") {
 		t.Errorf("Expected output to contain repository path 'group/another-repo'")
 	}
-	
+
 	// Should NOT contain URLs when verbose=false
 	if strings.Contains(output, "https://gitlab.com/group/test-repo") {
 		t.Errorf("Expected output to NOT contain URL when verbose=false")
 	}
-	
+
 	if strings.Contains(output, "https://gitlab.com/group/another-repo") {
 		t.Errorf("Expected output to NOT contain URL when verbose=false")
 	}
@@ -81,7 +81,7 @@ func TestDisplayRepositoryList_WithVerbose(t *testing.T) {
 			BaseDir: "/tmp/test",
 		},
 	}
-	
+
 	repos := []*gitlab.Repository{
 		{
 			ID:       1,
@@ -96,27 +96,27 @@ func TestDisplayRepositoryList_WithVerbose(t *testing.T) {
 			WebURL:   "https://gitlab.com/group/another-repo",
 		},
 	}
-	
+
 	mockClient := &mockGitLabClient{repos: repos}
-	
+
 	output := captureOutput(func() {
-		displayRepositoryList(mockClient, cfg, false, true) // showStatus=false, showVerbose=true
+		_ = displayRepositoryList(mockClient, cfg, false, true) // showStatus=false, showVerbose=true
 	})
-	
+
 	// Should contain repository names
 	if !strings.Contains(output, "group/test-repo") {
 		t.Errorf("Expected output to contain repository path 'group/test-repo'")
 	}
-	
+
 	if !strings.Contains(output, "group/another-repo") {
 		t.Errorf("Expected output to contain repository path 'group/another-repo'")
 	}
-	
+
 	// Should contain URLs when verbose=true
 	if !strings.Contains(output, "https://gitlab.com/group/test-repo") {
 		t.Errorf("Expected output to contain URL when verbose=true")
 	}
-	
+
 	if !strings.Contains(output, "https://gitlab.com/group/another-repo") {
 		t.Errorf("Expected output to contain URL when verbose=true")
 	}
@@ -128,7 +128,7 @@ func TestDisplayRepositoryTree_WithoutVerbose(t *testing.T) {
 			BaseDir: "/tmp/test",
 		},
 	}
-	
+
 	// Create a mock tree structure
 	tree := &gitlab.RepositoryTree{
 		Groups: map[string]*gitlab.GroupNode{
@@ -150,22 +150,22 @@ func TestDisplayRepositoryTree_WithoutVerbose(t *testing.T) {
 		},
 		Repositories: []*gitlab.Repository{},
 	}
-	
+
 	mockClient := &mockGitLabClient{tree: tree}
-	
+
 	output := captureOutput(func() {
-		displayRepositoryTree(mockClient, cfg, false, false) // showStatus=false, showVerbose=false
+		_ = displayRepositoryTree(mockClient, cfg, false, false) // showStatus=false, showVerbose=false
 	})
-	
+
 	// Should contain group and repo names
 	if !strings.Contains(output, "group1") {
 		t.Errorf("Expected output to contain group name 'group1'")
 	}
-	
+
 	if !strings.Contains(output, "repo1") {
 		t.Errorf("Expected output to contain repository name 'repo1'")
 	}
-	
+
 	// Should NOT contain URLs when verbose=false
 	if strings.Contains(output, "https://gitlab.com/group1/repo1") {
 		t.Errorf("Expected output to NOT contain URL when verbose=false")
@@ -178,7 +178,7 @@ func TestDisplayRepositoryTree_WithVerbose(t *testing.T) {
 			BaseDir: "/tmp/test",
 		},
 	}
-	
+
 	tree := &gitlab.RepositoryTree{
 		Groups: map[string]*gitlab.GroupNode{
 			"group1": {
@@ -199,22 +199,22 @@ func TestDisplayRepositoryTree_WithVerbose(t *testing.T) {
 		},
 		Repositories: []*gitlab.Repository{},
 	}
-	
+
 	mockClient := &mockGitLabClient{tree: tree}
-	
+
 	output := captureOutput(func() {
-		displayRepositoryTree(mockClient, cfg, false, true) // showStatus=false, showVerbose=true
+		_ = displayRepositoryTree(mockClient, cfg, false, true) // showStatus=false, showVerbose=true
 	})
-	
+
 	// Should contain group and repo names
 	if !strings.Contains(output, "group1") {
 		t.Errorf("Expected output to contain group name 'group1'")
 	}
-	
+
 	if !strings.Contains(output, "repo1") {
 		t.Errorf("Expected output to contain repository name 'repo1'")
 	}
-	
+
 	// Should contain URLs when verbose=true
 	if !strings.Contains(output, "https://gitlab.com/group1/repo1") {
 		t.Errorf("Expected output to contain URL when verbose=true")
@@ -244,24 +244,25 @@ func (m *mockGitLabClient) BuildRepositoryTree() (*gitlab.RepositoryTree, error)
 func TestListCommandFlags(t *testing.T) {
 	// Test that the verbose flag is properly registered
 	cmd := listCmd
-	
+
 	// Check if verbose flag exists
 	verboseFlag := cmd.Flags().Lookup("verbose")
 	if verboseFlag == nil {
 		t.Error("Expected --verbose flag to be registered")
+		return
 	}
-	
+
 	// Check if the short flag maps to the same flag (Cobra handles this automatically)
 	if verboseFlag.Shorthand != "v" {
 		t.Errorf("Expected shorthand for verbose flag to be 'v', got '%s'", verboseFlag.Shorthand)
 	}
-	
+
 	// Test default value
 	defaultValue := verboseFlag.DefValue
 	if defaultValue != "false" {
 		t.Errorf("Expected default value for verbose flag to be 'false', got '%s'", defaultValue)
 	}
-	
+
 	// Test flag usage
 	usage := verboseFlag.Usage
 	expectedUsage := "Show additional details like URLs"
@@ -273,42 +274,42 @@ func TestListCommandFlags(t *testing.T) {
 func TestListCommandFlagCombinations(t *testing.T) {
 	// Test that flags can be combined
 	cmd := listCmd
-	
+
 	// Reset flags for clean test
-	cmd.Flags().Set("verbose", "false")
-	cmd.Flags().Set("tree", "false")
-	cmd.Flags().Set("status", "true")
-	
+	_ = cmd.Flags().Set("verbose", "false")
+	_ = cmd.Flags().Set("tree", "false")
+	_ = cmd.Flags().Set("status", "true")
+
 	// Test setting verbose flag
 	err := cmd.Flags().Set("verbose", "true")
 	if err != nil {
 		t.Errorf("Failed to set verbose flag: %v", err)
 	}
-	
+
 	verboseValue, err := cmd.Flags().GetBool("verbose")
 	if err != nil {
 		t.Errorf("Failed to get verbose flag value: %v", err)
 	}
-	
+
 	if !verboseValue {
 		t.Error("Expected verbose flag to be true after setting")
 	}
-	
+
 	// Test combining with tree flag
 	err = cmd.Flags().Set("tree", "true")
 	if err != nil {
 		t.Errorf("Failed to set tree flag: %v", err)
 	}
-	
+
 	treeValue, err := cmd.Flags().GetBool("tree")
 	if err != nil {
 		t.Errorf("Failed to get tree flag value: %v", err)
 	}
-	
+
 	if !treeValue {
 		t.Error("Expected tree flag to be true after setting")
 	}
-	
+
 	// Both flags should still be set correctly
 	verboseValue, _ = cmd.Flags().GetBool("verbose")
 	if !verboseValue {
