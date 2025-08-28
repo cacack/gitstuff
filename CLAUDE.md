@@ -79,6 +79,21 @@ go test ./cmd ./internal/config ./internal/git ./internal/gitlab
 - Provides clean, clear output
 - No confusing warnings about missing test files
 
+### Code Formatting - MANDATORY
+
+**ALWAYS run code formatting before committing:**
+```bash
+make format     # Formats all Go code with gofmt and goimports
+make fmt        # Alias for format
+```
+
+**Check formatting (CI runs this):**
+```bash
+make check-format
+```
+
+The CI pipeline includes a formatting check that will fail if code is not properly formatted.
+
 ### Code Organization
 
 - **Commands**: All CLI commands go in `cmd/` directory
@@ -117,8 +132,27 @@ go test ./cmd ./internal/config ./internal/git ./internal/gitlab
 - Guide users to solutions (e.g., "run 'gitlab-cli config' first")
 - Handle network issues, authentication failures, and git errors gracefully
 
-### Code Style
+### Code Style - MANDATORY FORMATTING
 
+**CRITICAL**: All code must be properly formatted before committing. The CI pipeline will fail if code is not formatted.
+
+**ALWAYS run formatting after making changes:**
+```bash
+make format    # or make fmt
+```
+
+**To check formatting (CI command):**
+```bash
+make check-format
+```
+
+**Formatting Requirements:**
+- **gofmt**: All Go code must pass `gofmt -l .` (no output = properly formatted)
+- **goimports**: All import statements must be properly organized and formatted
+- The CI pipeline runs `make check-format` and will fail if formatting is incorrect
+- Use `make format` before committing to ensure compliance
+
+**General Code Style:**
 - Follow standard Go conventions
 - DO NOT ADD COMMENTS unless specifically requested by the user
 - Use descriptive variable and function names
@@ -178,9 +212,11 @@ go test ./cmd ./internal/config ./internal/git ./internal/gitlab
 
 ## When Working on This Project
 
-1. **Always test using `make test`** - never use `go test ./...`
-2. **Build using `make build`** for consistency
-3. **Update README.md** if adding new features or changing behavior
-4. **Consider security implications** especially for token handling
-5. **Maintain the clean architecture** with separate concerns in `internal/` packages
-6. **Test edge cases** like network failures, invalid configs, missing git repos
+1. **ALWAYS format code using `make format`** before any commits - CI will fail otherwise
+2. **Always test using `make test`** - never use `go test ./...`
+3. **Build using `make build`** for consistency
+4. **Check formatting with `make check-format`** before pushing
+5. **Update README.md** if adding new features or changing behavior
+6. **Consider security implications** especially for token handling
+7. **Maintain the clean architecture** with separate concerns in `internal/` packages
+8. **Test edge cases** like network failures, invalid configs, missing git repos

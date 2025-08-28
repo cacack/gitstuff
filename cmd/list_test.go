@@ -235,7 +235,7 @@ func (m *mockGitLabClient) ListRepositoriesInGroup(groupPath string) ([]*gitlab.
 	if groupPath == "" {
 		return m.repos, nil
 	}
-	
+
 	var filtered []*gitlab.Repository
 	for _, repo := range m.repos {
 		if strings.HasPrefix(repo.FullPath, groupPath+"/") {

@@ -427,11 +427,11 @@ func TestNewClientHTTPClientConfiguration(t *testing.T) {
 
 func TestGroupFiltering(t *testing.T) {
 	tests := []struct {
-		name           string
-		allRepos       []*Repository
-		groupFilter    string
-		expectedRepos  []string
-		expectedCount  int
+		name          string
+		allRepos      []*Repository
+		groupFilter   string
+		expectedRepos []string
+		expectedCount int
 	}{
 		{
 			name: "Filter by top-level group",
@@ -587,10 +587,10 @@ func TestFindGroupInTree(t *testing.T) {
 
 func findGroupInTreeHelper(tree *RepositoryTree, groupPath string) *GroupNode {
 	parts := strings.Split(groupPath, "/")
-	
+
 	current := tree.Groups
 	var currentNode *GroupNode
-	
+
 	for _, part := range parts {
 		if node, exists := current[part]; exists {
 			currentNode = node
@@ -599,6 +599,6 @@ func findGroupInTreeHelper(tree *RepositoryTree, groupPath string) *GroupNode {
 			return nil
 		}
 	}
-	
+
 	return currentNode
 }

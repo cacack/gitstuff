@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Check code formatting
+        run: make check-format
+
       - name: Run tests
         run: make test
 
