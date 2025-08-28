@@ -20,7 +20,8 @@ help:
 # Build the application
 build:
 	@echo "Building gitstuff..."
-	go build -o gitstuff .
+	@VERSION=$$(git describe --tags --exact-match 2>/dev/null || echo "dev-$$(git rev-parse --short HEAD)"); \
+	go build -ldflags="-s -w -X gitstuff/cmd.version=$$VERSION" -o gitstuff .
 	@echo "✅ Build complete: ./gitstuff"
 
 # Run all tests

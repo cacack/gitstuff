@@ -1,0 +1,128 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: make test
+
+      - name: Build cross-platform binaries
+        run: |
+          # Create dist directory
+          mkdir -p dist
+
+          # Get version from tag
+          VERSION=${GITHUB_REF#refs/tags/}
+
+          # Build for different platforms
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/gitstuff-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/gitstuff-linux-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/gitstuff-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version=$VERSION" -o dist/gitstuff-darwin-arm64 .
+
+          # Create checksums
+          cd dist
+          sha256sum * > checksums.txt
+          cd ..
+
+          # Make binaries executable
+          chmod +x dist/gitstuff-*
+
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+          # Create release notes
+          cat > release_notes.md << EOF
+          # GitStuff $VERSION
+
+          ## Installation
+
+          \`\`\`bash
+          # Download and install GitStuff
+          curl -L https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-\$(uname -s | tr '[:upper:]' '[:lower:]')-\$(uname -m | sed 's/x86_64/amd64/') -o gitstuff
+          chmod +x gitstuff
+          sudo mv gitstuff /usr/local/bin/
+          \`\`\`
+
+          ### Manual Download
+
+          | Platform | Architecture | Download |
+          |----------|--------------|----------|
+          | Linux | x64 | [gitstuff-linux-amd64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-linux-amd64) |
+          | Linux | ARM64 | [gitstuff-linux-arm64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-linux-arm64) |
+          | macOS | x64 | [gitstuff-darwin-amd64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-darwin-amd64) |
+          | macOS | ARM64 (M1/M2) | [gitstuff-darwin-arm64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-darwin-arm64) |
+
+          ## Usage
+
+          After installation, configure your GitLab connection:
+          \`\`\`bash
+          gitstuff config
+          \`\`\`
+
+          Then list your repositories:
+          \`\`\`bash
+          gitstuff list
+          \`\`\`
+
+          See the [README](https://github.com/${{ github.repository }}#usage) for more commands and options.
+
+          ## Verification
+
+          All binaries include checksums for verification. Download [checksums.txt](https://github.com/${{ github.repository }}/releases/download/$VERSION/checksums.txt) and verify with:
+
+          \`\`\`bash
+          sha256sum -c checksums.txt
+          \`\`\`
+          EOF
+
+
+      - name: Create GitHub Release
+        uses: ncipollo/create-release@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: GitStuff ${{ github.ref_name }}
+          bodyFile: release_notes.md
+          draft: false
+          prerelease: false
+          artifacts: |
+            dist/gitstuff-linux-amd64
+            dist/gitstuff-linux-arm64
+            dist/gitstuff-darwin-amd64
+            dist/gitstuff-darwin-arm64
+            dist/checksums.txt
+          token: ${{ secrets.GITHUB_TOKEN }}

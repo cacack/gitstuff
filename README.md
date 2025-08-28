@@ -1,11 +1,34 @@
 # GitStuff
 
+[![CI](https://github.com/neilfarmer/gitstuff/actions/workflows/ci.yml/badge.svg)](https://github.com/neilfarmer/gitstuff/actions/workflows/ci.yml)
+[![Release](https://github.com/neilfarmer/gitstuff/actions/workflows/release.yml/badge.svg)](https://github.com/neilfarmer/gitstuff/actions/workflows/release.yml)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/neilfarmer/gitstuff)](https://github.com/neilfarmer/gitstuff/releases/latest)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/neilfarmer/gitstuff)](https://golang.org/)
+
 A comprehensive Go CLI application for managing GitLab repositories. This tool allows you to list all repositories in your GitLab instance, clone them individually or all at once, and check their local status including current working branch.
+
+## Quick Start
+
+```bash
+# Download and install GitStuff
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/') -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
+
+# Configure your GitLab connection
+gitstuff config
+
+# List your repositories
+gitstuff list
+
+# Clone all repositories
+gitstuff clone --all
+```
 
 ## Features
 
 - **List Repositories**: View all repositories with hierarchical group structure
-- **Clone Management**: Download single repositories or all at once  
+- **Clone Management**: Download single repositories or all at once
 - **Status Tracking**: See which repos are cloned and their current branch
 - **Group Structure**: Maintains exact GitLab group/subgroup organization
 - **Flexible Authentication**: Supports both HTTPS and SSH cloning
@@ -13,29 +36,49 @@ A comprehensive Go CLI application for managing GitLab repositories. This tool a
 
 ## Installation
 
-### Quick Build
 ```bash
-go build -o gitlab-cli .
+# Download and install GitStuff
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/') -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
 ```
 
-### Using Make (Recommended)
+**Manual download:**
+
+Download the latest release for your platform from the [releases page](https://github.com/neilfarmer/gitstuff/releases/latest):
+
+| Platform | Architecture  | Download Link                                                                                                                |
+| -------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Linux    | x64           | [gitstuff-linux-amd64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-amd64)   |
+| Linux    | ARM64         | [gitstuff-linux-arm64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-arm64)   |
+| macOS    | x64           | [gitstuff-darwin-amd64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-amd64) |
+| macOS    | ARM64 (M1/M2) | [gitstuff-darwin-arm64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-arm64) |
+
+### Build from Source
+
+**Prerequisites:** Go 1.21 or later
+
 ```bash
+# Clone the repository
+git clone https://github.com/neilfarmer/gitstuff.git
+cd gitstuff
+
+# Build using make
 make build
-```
 
-### Install System-Wide
-```bash
+# Or build directly
+go build -o gitstuff .
+
+# Install system-wide
 make install
 ```
-
-This will install `gitlab-cli` to `/usr/local/bin` so you can run it from anywhere.
 
 ## Configuration
 
 Before using the CLI, you need to configure your GitLab connection:
 
 ```bash
-./gitstuff config
+gitstuff config
 ```
 
 This will prompt you for:
@@ -46,16 +89,6 @@ This will prompt you for:
 - **SSL Certificate Verification**: Whether to skip SSL verification for self-signed certificates
 
 > **Note**: The CLI automatically adds `https://` to URLs that don't specify a protocol.
-
-### Self-Signed Certificates
-
-If your GitLab instance uses self-signed certificates, you'll need to use the `--insecure` flag to skip SSL certificate verification:
-
-```bash
-./gitstuff config --insecure
-```
-
-This is common in corporate environments with internal GitLab instances.
 
 ### Creating a GitLab Access Token
 
@@ -69,10 +102,10 @@ This is common in corporate environments with internal GitLab instances.
 You can also configure using command flags:
 
 ```bash
-./gitstuff config --url https://gitlab.example.com --token your-token --base-dir /path/to/repos
+gitstuff config --url https://gitlab.example.com --token your-token --base-dir /path/to/repos
 
 # For GitLab instances with self-signed certificates
-./gitstuff config --url https://gitlab.example.com --token your-token --insecure
+gitstuff config --url https://gitlab.example.com --token your-token --insecure
 ```
 
 ## Usage
@@ -81,32 +114,32 @@ You can also configure using command flags:
 
 ```bash
 # Simple list view (shows folder structure and status, no URLs)
-./gitstuff list
+gitstuff list
 
 # Tree view with group structure
-./gitstuff list --tree
+gitstuff list --tree
 
 # Show additional details like URLs
-./gitstuff list --verbose
+gitstuff list --verbose
 
 # List without status information
-./gitstuff list --status=false
+gitstuff list --status=false
 ```
 
 ### Clone Repositories
 
 ```bash
 # Clone a specific repository
-./gitstuff clone group/project-name
+gitstuff clone group/project-name
 
 # Clone all repositories
-./gitstuff clone --all
+gitstuff clone --all
 
 # Clone using SSH instead of HTTPS
-./gitstuff clone --ssh group/project-name
+gitstuff clone --ssh group/project-name
 
 # Update already cloned repositories
-./gitstuff clone --all --update
+gitstuff clone --all --update
 ```
 
 ## Repository Structure
@@ -137,7 +170,7 @@ The CLI shows comprehensive status for each repository:
 
 ## Configuration File
 
-Configuration is stored in `~/.gitlab-cli.yaml`:
+Configuration is stored in `~/.gitstuff.yaml`:
 
 ```yaml
 gitlab:
@@ -156,7 +189,7 @@ Configure GitLab connection settings.
 **Flags:**
 
 - `-u, --url`: GitLab instance URL
-- `-t, --token`: GitLab access token  
+- `-t, --token`: GitLab access token
 - `-d, --base-dir`: Base directory for repositories
 - `-k, --insecure`: Skip SSL certificate verification (for self-signed certificates)
 
@@ -191,29 +224,29 @@ Clone GitLab repositories.
 
 ```bash
 # 1. Configure the CLI
-./gitstuff config
+gitstuff config
 
 # 2. List all repositories to see what's available
-./gitstuff list --tree
+gitstuff list --tree
 
 # 3. Clone all repositories
-./gitstuff clone --all
+gitstuff clone --all
 
 # 4. Later, update all repositories
-./gitstuff clone --all --update
+gitstuff clone --all --update
 ```
 
 ### Working with Specific Repositories
 
 ```bash
 # Clone a specific project
-./gitstuff clone mygroup/myproject
+gitstuff clone mygroup/myproject
 
 # Update a specific project
-./gitstuff clone mygroup/myproject --update
+gitstuff clone mygroup/myproject --update
 
 # Use SSH for cloning
-./gitstuff clone mygroup/myproject --ssh
+gitstuff clone mygroup/myproject --ssh
 ```
 
 ## Requirements
@@ -225,10 +258,6 @@ Clone GitLab repositories.
 
 ## Testing
 
-We have several ways to run the test suite:
-
-### Easy Way (Recommended)
-
 ```bash
 # Run all tests with clear output
 make test
@@ -237,34 +266,47 @@ make test
 make test-verbose
 ```
 
-### Manual Way
-```bash
-# Test individual packages
-go test ./internal/config
-go test ./internal/git
-go test ./internal/gitlab
-
-# Test all packages at once
-go test ./internal/config ./internal/git ./internal/gitlab
-```
-
-### Why not `go test ./...`?
-
-The `./...` pattern in Go means "all packages in current directory and subdirectories". While it works, it can be confusing because:
-- It tries to test packages that don't have tests (like `cmd/`)
-- The output shows "no test files" warnings
-- It's not immediately clear what's being tested
-
-Our explicit approach tests only the packages that actually have tests, giving cleaner output.
-
 ## Error Handling
 
 The CLI provides clear error messages for common issues:
 
-- **Missing configuration**: Prompts to run `gitlab-cli config`
+- **Missing configuration**: Prompts to run `gitstuff config`
 - **Invalid GitLab credentials**: Clear authentication error messages
 - **Network issues**: Helpful network connectivity error messages
 - **Git errors**: Detailed git operation error messages
+
+## Releases
+
+### Creating a Release
+
+To create a new release:
+
+1. **Tag the release:**
+
+   ```bash
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+
+2. **GitHub Actions automatically:**
+
+   - Runs all tests
+   - Builds binaries for all platforms
+   - Creates GitHub release with download links
+   - Generates install scripts
+
+3. **Release artifacts include:**
+   - Cross-platform binaries (Linux, macOS, Windows)
+   - Architecture support (x64, ARM64)
+   - Automated install scripts
+   - SHA256 checksums for verification
+
+### Versioning
+
+This project follows [Semantic Versioning](https://semver.org/):
+
+- `v1.2.3` - Major.Minor.Patch
+- `v1.2.0-beta.1` - Pre-release versions
 
 ## License
 
