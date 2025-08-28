@@ -424,3 +424,181 @@ func TestNewClientHTTPClientConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestGroupFiltering(t *testing.T) {
+	tests := []struct {
+		name           string
+		allRepos       []*Repository
+		groupFilter    string
+		expectedRepos  []string
+		expectedCount  int
+	}{
+		{
+			name: "Filter by top-level group",
+			allRepos: []*Repository{
+				{ID: 1, Name: "repo1", FullPath: "team-a/repo1"},
+				{ID: 2, Name: "repo2", FullPath: "team-a/repo2"},
+				{ID: 3, Name: "repo3", FullPath: "team-b/repo3"},
+				{ID: 4, Name: "root-repo", FullPath: "root-repo"},
+			},
+			groupFilter:   "team-a",
+			expectedRepos: []string{"team-a/repo1", "team-a/repo2"},
+			expectedCount: 2,
+		},
+		{
+			name: "Filter by nested group",
+			allRepos: []*Repository{
+				{ID: 1, Name: "backend-repo", FullPath: "team-a/backend/backend-repo"},
+				{ID: 2, Name: "frontend-repo", FullPath: "team-a/frontend/frontend-repo"},
+				{ID: 3, Name: "other-repo", FullPath: "team-a/other-repo"},
+				{ID: 4, Name: "external-repo", FullPath: "team-b/external-repo"},
+			},
+			groupFilter:   "team-a/backend",
+			expectedRepos: []string{"team-a/backend/backend-repo"},
+			expectedCount: 1,
+		},
+		{
+			name: "Filter with no matches",
+			allRepos: []*Repository{
+				{ID: 1, Name: "repo1", FullPath: "team-a/repo1"},
+				{ID: 2, Name: "repo2", FullPath: "team-b/repo2"},
+			},
+			groupFilter:   "team-c",
+			expectedRepos: []string{},
+			expectedCount: 0,
+		},
+		{
+			name: "Filter includes subgroups",
+			allRepos: []*Repository{
+				{ID: 1, Name: "direct-repo", FullPath: "team-a/direct-repo"},
+				{ID: 2, Name: "sub-repo1", FullPath: "team-a/sub1/sub-repo1"},
+				{ID: 3, Name: "sub-repo2", FullPath: "team-a/sub2/sub-repo2"},
+				{ID: 4, Name: "other-repo", FullPath: "team-b/other-repo"},
+			},
+			groupFilter:   "team-a",
+			expectedRepos: []string{"team-a/direct-repo", "team-a/sub1/sub-repo1", "team-a/sub2/sub-repo2"},
+			expectedCount: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filtered := filterRepositoriesByGroup(tt.allRepos, tt.groupFilter)
+
+			if len(filtered) != tt.expectedCount {
+				t.Errorf("Expected %d repos, got %d", tt.expectedCount, len(filtered))
+			}
+
+			for i, expectedPath := range tt.expectedRepos {
+				if i >= len(filtered) {
+					t.Errorf("Missing expected repo: %s", expectedPath)
+					continue
+				}
+				if filtered[i].FullPath != expectedPath {
+					t.Errorf("Expected repo %s at index %d, got %s", expectedPath, i, filtered[i].FullPath)
+				}
+			}
+		})
+	}
+}
+
+func filterRepositoriesByGroup(repos []*Repository, groupPath string) []*Repository {
+	if groupPath == "" {
+		return repos
+	}
+
+	var filtered []*Repository
+	for _, repo := range repos {
+		if strings.HasPrefix(repo.FullPath, groupPath+"/") {
+			filtered = append(filtered, repo)
+		}
+	}
+	return filtered
+}
+
+func TestFindGroupInTree(t *testing.T) {
+	repos := []*Repository{
+		{ID: 1, Name: "repo1", FullPath: "team-a/backend/repo1"},
+		{ID: 2, Name: "repo2", FullPath: "team-a/frontend/repo2"},
+		{ID: 3, Name: "repo3", FullPath: "team-a/repo3"},
+		{ID: 4, Name: "repo4", FullPath: "team-b/repo4"},
+	}
+
+	tree := buildTreeFromRepos(repos)
+
+	tests := []struct {
+		name      string
+		groupPath string
+		expected  bool
+		repoCount int
+	}{
+		{
+			name:      "Find top-level group",
+			groupPath: "team-a",
+			expected:  true,
+			repoCount: 1,
+		},
+		{
+			name:      "Find nested group",
+			groupPath: "team-a/backend",
+			expected:  true,
+			repoCount: 1,
+		},
+		{
+			name:      "Find another nested group",
+			groupPath: "team-a/frontend",
+			expected:  true,
+			repoCount: 1,
+		},
+		{
+			name:      "Group not found",
+			groupPath: "team-c",
+			expected:  false,
+			repoCount: 0,
+		},
+		{
+			name:      "Nested group not found",
+			groupPath: "team-a/nonexistent",
+			expected:  false,
+			repoCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findGroupInTreeHelper(tree, tt.groupPath)
+
+			if tt.expected && result == nil {
+				t.Errorf("Expected to find group %s but got nil", tt.groupPath)
+				return
+			}
+
+			if !tt.expected && result != nil {
+				t.Errorf("Expected not to find group %s but got result", tt.groupPath)
+				return
+			}
+
+			if result != nil && len(result.Repositories) != tt.repoCount {
+				t.Errorf("Expected %d repos in group %s, got %d", tt.repoCount, tt.groupPath, len(result.Repositories))
+			}
+		})
+	}
+}
+
+func findGroupInTreeHelper(tree *RepositoryTree, groupPath string) *GroupNode {
+	parts := strings.Split(groupPath, "/")
+	
+	current := tree.Groups
+	var currentNode *GroupNode
+	
+	for _, part := range parts {
+		if node, exists := current[part]; exists {
+			currentNode = node
+			current = node.SubGroups
+		} else {
+			return nil
+		}
+	}
+	
+	return currentNode
+}

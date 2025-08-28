@@ -22,7 +22,7 @@ func TestCreate(t *testing.T) {
 	token := "test-token"
 	baseDir := "/custom/base/dir"
 
-	err := Create(gitlabURL, token, baseDir, false)
+	err := Create(gitlabURL, token, baseDir, false, "")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestCreateWithDefaultBaseDir(t *testing.T) {
 	gitlabURL := "https://gitlab.example.com"
 	token := "test-token"
 
-	err := Create(gitlabURL, token, "", true)
+	err := Create(gitlabURL, token, "", true, "test-group")
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -106,6 +106,10 @@ func TestCreateWithDefaultBaseDir(t *testing.T) {
 
 	if config.GitLab.Insecure != true {
 		t.Errorf("Expected insecure to be true, got %v", config.GitLab.Insecure)
+	}
+
+	if config.GitLab.Group != "test-group" {
+		t.Errorf("Expected group to be 'test-group', got %s", config.GitLab.Group)
 	}
 }
 
@@ -307,5 +311,66 @@ func TestLoadWithInsecureFlag(t *testing.T) {
 	expectedBaseDir := filepath.Join(tempDir, "gitlab-repos")
 	if config.Local.BaseDir != expectedBaseDir {
 		t.Errorf("Expected base dir %s, got %s", expectedBaseDir, config.Local.BaseDir)
+	}
+}
+
+func TestLoadWithGroupFilter(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, ".gitstuff.yaml")
+
+	originalHome := os.Getenv("HOME")
+	t.Cleanup(func() {
+		os.Setenv("HOME", originalHome)
+	})
+	os.Setenv("HOME", tempDir)
+
+	testConfig := Config{
+		GitLab: GitLabConfig{
+			URL:      "https://gitlab.example.com",
+			Token:    "test-token",
+			Insecure: false,
+			Group:    "my-team/backend",
+		},
+		Local: LocalConfig{
+			BaseDir: filepath.Join(tempDir, "gitlab-repos"),
+		},
+	}
+
+	data, err := yaml.Marshal(&testConfig)
+	if err != nil {
+		t.Fatalf("Failed to marshal config: %v", err)
+	}
+
+	err = os.WriteFile(configPath, data, 0600)
+	if err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	viper.Reset()
+	viper.SetConfigFile(configPath)
+	err = viper.ReadInConfig()
+	if err != nil {
+		t.Fatalf("Failed to read config: %v", err)
+	}
+
+	config, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if config.GitLab.URL != testConfig.GitLab.URL {
+		t.Errorf("Expected URL %s, got %s", testConfig.GitLab.URL, config.GitLab.URL)
+	}
+
+	if config.GitLab.Token != testConfig.GitLab.Token {
+		t.Errorf("Expected token %s, got %s", testConfig.GitLab.Token, config.GitLab.Token)
+	}
+
+	if config.GitLab.Group != testConfig.GitLab.Group {
+		t.Errorf("Expected group %s, got %s", testConfig.GitLab.Group, config.GitLab.Group)
+	}
+
+	if config.Local.BaseDir != testConfig.Local.BaseDir {
+		t.Errorf("Expected base dir %s, got %s", testConfig.Local.BaseDir, config.Local.BaseDir)
 	}
 }

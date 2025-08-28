@@ -15,6 +15,7 @@ import (
 // GitLabClientInterface defines the methods we need from the GitLab client
 type GitLabClientInterface interface {
 	ListAllRepositories() ([]*gitlab.Repository, error)
+	ListRepositoriesInGroup(groupPath string) ([]*gitlab.Repository, error)
 	BuildRepositoryTree() (*gitlab.RepositoryTree, error)
 }
 
@@ -30,6 +31,7 @@ func init() {
 	listCmd.Flags().BoolP("tree", "t", false, "Display repositories in tree structure with groups")
 	listCmd.Flags().BoolP("status", "s", true, "Show local repository status")
 	listCmd.Flags().BoolP("verbose", "v", false, "Show additional details like URLs")
+	listCmd.Flags().StringP("group", "g", "", "Filter repositories to only those in the specified group")
 }
 
 func runList(cmd *cobra.Command, args []string) error {
@@ -46,16 +48,30 @@ func runList(cmd *cobra.Command, args []string) error {
 	showTree, _ := cmd.Flags().GetBool("tree")
 	showStatus, _ := cmd.Flags().GetBool("status")
 	showVerbose, _ := cmd.Flags().GetBool("verbose")
+	groupFilter, _ := cmd.Flags().GetString("group")
+
+	// Use group from flag first, then config, then empty string
+	targetGroup := groupFilter
+	if targetGroup == "" {
+		targetGroup = cfg.GitLab.Group
+	}
 
 	if showTree {
-		return displayRepositoryTree(client, cfg, showStatus, showVerbose)
+		return displayRepositoryTree(client, cfg, showStatus, showVerbose, targetGroup)
 	} else {
-		return displayRepositoryList(client, cfg, showStatus, showVerbose)
+		return displayRepositoryList(client, cfg, showStatus, showVerbose, targetGroup)
 	}
 }
 
-func displayRepositoryList(client GitLabClientInterface, cfg *config.Config, showStatus, showVerbose bool) error {
-	repos, err := client.ListAllRepositories()
+func displayRepositoryList(client GitLabClientInterface, cfg *config.Config, showStatus, showVerbose bool, groupFilter string) error {
+	var repos []*gitlab.Repository
+	var err error
+	
+	if groupFilter != "" {
+		repos, err = client.ListRepositoriesInGroup(groupFilter)
+	} else {
+		repos, err = client.ListAllRepositories()
+	}
 	if err != nil {
 		return err
 	}
@@ -85,42 +101,74 @@ func displayRepositoryList(client GitLabClientInterface, cfg *config.Config, sho
 	return nil
 }
 
-func displayRepositoryTree(client GitLabClientInterface, cfg *config.Config, showStatus, showVerbose bool) error {
+func displayRepositoryTree(client GitLabClientInterface, cfg *config.Config, showStatus, showVerbose bool, groupFilter string) error {
 	tree, err := client.BuildRepositoryTree()
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Repository tree structure:")
+	if groupFilter != "" {
+		fmt.Printf("Repository tree structure (filtered by group: %s):\n", groupFilter)
+		displayFilteredTree(tree, groupFilter, cfg, showStatus, showVerbose)
+	} else {
+		fmt.Println("Repository tree structure:")
+		
+		if len(tree.Repositories) > 0 {
+			fmt.Println("Root repositories:")
+			for _, repo := range tree.Repositories {
+				fmt.Printf("📁 %s\n", repo.Name)
 
-	if len(tree.Repositories) > 0 {
-		fmt.Println("Root repositories:")
-		for _, repo := range tree.Repositories {
-			fmt.Printf("📁 %s\n", repo.Name)
-
-			if showVerbose {
-				fmt.Printf("   URL: %s\n", repo.WebURL)
-			}
-
-			if showStatus {
-				localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
-				status, err := git.GetRepositoryStatus(localPath)
-				if err != nil {
-					fmt.Printf("   Status: ❌ Error: %v\n", err)
-				} else {
-					displayStatus(status)
+				if showVerbose {
+					fmt.Printf("   URL: %s\n", repo.WebURL)
 				}
+
+				if showStatus {
+					localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
+					status, err := git.GetRepositoryStatus(localPath)
+					if err != nil {
+						fmt.Printf("   Status: ❌ Error: %v\n", err)
+					} else {
+						displayStatus(status)
+					}
+				}
+				fmt.Print("\n")
 			}
-			fmt.Print("\n")
+		}
+
+		for groupName, groupNode := range tree.Groups {
+			displayGroup(groupNode, 0, cfg, showStatus, showVerbose)
+			_ = groupName
 		}
 	}
 
-	for groupName, groupNode := range tree.Groups {
-		displayGroup(groupNode, 0, cfg, showStatus, showVerbose)
-		_ = groupName
-	}
-
 	return nil
+}
+
+func displayFilteredTree(tree *gitlab.RepositoryTree, groupFilter string, cfg *config.Config, showStatus, showVerbose bool) {
+	targetGroup := findGroupInTree(tree, groupFilter)
+	if targetGroup != nil {
+		displayGroup(targetGroup, 0, cfg, showStatus, showVerbose)
+	} else {
+		fmt.Printf("Group '%s' not found\n", groupFilter)
+	}
+}
+
+func findGroupInTree(tree *gitlab.RepositoryTree, groupPath string) *gitlab.GroupNode {
+	parts := strings.Split(groupPath, "/")
+	
+	current := tree.Groups
+	var currentNode *gitlab.GroupNode
+	
+	for _, part := range parts {
+		if node, exists := current[part]; exists {
+			currentNode = node
+			current = node.SubGroups
+		} else {
+			return nil
+		}
+	}
+	
+	return currentNode
 }
 
 func displayGroup(group *gitlab.GroupNode, indent int, cfg *config.Config, showStatus, showVerbose bool) {

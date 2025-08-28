@@ -53,7 +53,7 @@ func TestDisplayRepositoryList_WithoutVerbose(t *testing.T) {
 	mockClient := &mockGitLabClient{repos: repos}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryList(mockClient, cfg, false, false) // showStatus=false, showVerbose=false
+		_ = displayRepositoryList(mockClient, cfg, false, false, "") // showStatus=false, showVerbose=false, no group filter
 	})
 
 	// Should contain repository names
@@ -100,7 +100,7 @@ func TestDisplayRepositoryList_WithVerbose(t *testing.T) {
 	mockClient := &mockGitLabClient{repos: repos}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryList(mockClient, cfg, false, true) // showStatus=false, showVerbose=true
+		_ = displayRepositoryList(mockClient, cfg, false, true, "") // showStatus=false, showVerbose=true, no group filter
 	})
 
 	// Should contain repository names
@@ -154,7 +154,7 @@ func TestDisplayRepositoryTree_WithoutVerbose(t *testing.T) {
 	mockClient := &mockGitLabClient{tree: tree}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryTree(mockClient, cfg, false, false) // showStatus=false, showVerbose=false
+		_ = displayRepositoryTree(mockClient, cfg, false, false, "") // showStatus=false, showVerbose=false, no group filter
 	})
 
 	// Should contain group and repo names
@@ -203,7 +203,7 @@ func TestDisplayRepositoryTree_WithVerbose(t *testing.T) {
 	mockClient := &mockGitLabClient{tree: tree}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryTree(mockClient, cfg, false, true) // showStatus=false, showVerbose=true
+		_ = displayRepositoryTree(mockClient, cfg, false, true, "") // showStatus=false, showVerbose=true, no group filter
 	})
 
 	// Should contain group and repo names
@@ -229,6 +229,20 @@ type mockGitLabClient struct {
 
 func (m *mockGitLabClient) ListAllRepositories() ([]*gitlab.Repository, error) {
 	return m.repos, nil
+}
+
+func (m *mockGitLabClient) ListRepositoriesInGroup(groupPath string) ([]*gitlab.Repository, error) {
+	if groupPath == "" {
+		return m.repos, nil
+	}
+	
+	var filtered []*gitlab.Repository
+	for _, repo := range m.repos {
+		if strings.HasPrefix(repo.FullPath, groupPath+"/") {
+			filtered = append(filtered, repo)
+		}
+	}
+	return filtered, nil
 }
 
 func (m *mockGitLabClient) BuildRepositoryTree() (*gitlab.RepositoryTree, error) {

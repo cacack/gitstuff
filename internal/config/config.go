@@ -18,6 +18,7 @@ type GitLabConfig struct {
 	URL      string `yaml:"url"`
 	Token    string `yaml:"token"`
 	Insecure bool   `yaml:"insecure"`
+	Group    string `yaml:"group"`
 }
 
 type LocalConfig struct {
@@ -46,7 +47,7 @@ func Load() (*Config, error) {
 	return &config, nil
 }
 
-func Create(gitlabURL, token, baseDir string, insecure bool) error {
+func Create(gitlabURL, token, baseDir string, insecure bool, group string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get user home directory: %w", err)
@@ -61,6 +62,7 @@ func Create(gitlabURL, token, baseDir string, insecure bool) error {
 			URL:      gitlabURL,
 			Token:    token,
 			Insecure: insecure,
+			Group:    group,
 		},
 		Local: LocalConfig{
 			BaseDir: baseDir,

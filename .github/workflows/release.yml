@@ -71,21 +71,35 @@ jobs:
 
           ## Installation
 
+          Choose the appropriate command for your platform:
+
+          **Linux x86_64:**
           \`\`\`bash
-          # Download and install GitStuff
-          curl -L https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-\$(uname -s | tr '[:upper:]' '[:lower:]')-\$(uname -m | sed 's/x86_64/amd64/') -o gitstuff
+          curl -L https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-linux-amd64 -o gitstuff
           chmod +x gitstuff
           sudo mv gitstuff /usr/local/bin/
           \`\`\`
 
-          ### Manual Download
+          **Linux ARM64:**
+          \`\`\`bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-linux-arm64 -o gitstuff
+          chmod +x gitstuff
+          sudo mv gitstuff /usr/local/bin/
+          \`\`\`
 
-          | Platform | Architecture | Download |
-          |----------|--------------|----------|
-          | Linux | x64 | [gitstuff-linux-amd64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-linux-amd64) |
-          | Linux | ARM64 | [gitstuff-linux-arm64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-linux-arm64) |
-          | macOS | x64 | [gitstuff-darwin-amd64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-darwin-amd64) |
-          | macOS | ARM64 (M1/M2) | [gitstuff-darwin-arm64](https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-darwin-arm64) |
+          **macOS x86_64:**
+          \`\`\`bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-darwin-amd64 -o gitstuff
+          chmod +x gitstuff
+          sudo mv gitstuff /usr/local/bin/
+          \`\`\`
+
+          **macOS ARM64 (M1/M2):**
+          \`\`\`bash
+          curl -L https://github.com/${{ github.repository }}/releases/download/$VERSION/gitstuff-darwin-arm64 -o gitstuff
+          chmod +x gitstuff
+          sudo mv gitstuff /usr/local/bin/
+          \`\`\`
 
           ## Usage
 

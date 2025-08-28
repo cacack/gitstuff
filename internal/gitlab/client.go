@@ -81,7 +81,15 @@ func normalizeURL(baseURL string) (string, error) {
 }
 
 func (c *Client) ListAllRepositories() ([]*Repository, error) {
+	return c.ListRepositoriesInGroup("")
+}
+
+func (c *Client) ListRepositoriesInGroup(groupPath string) ([]*Repository, error) {
 	var allRepos []*Repository
+
+	if groupPath != "" {
+		return c.listRepositoriesInSpecificGroup(groupPath)
+	}
 
 	opts := &gitlab.ListProjectsOptions{
 		ListOptions: gitlab.ListOptions{
@@ -248,4 +256,56 @@ func (c *Client) BuildRepositoryTree() (*RepositoryTree, error) {
 	}
 
 	return tree, nil
+}
+
+func (c *Client) listRepositoriesInSpecificGroup(groupPath string) ([]*Repository, error) {
+	var allRepos []*Repository
+
+	group, _, err := c.client.Groups.GetGroup(groupPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group %s: %w", groupPath, err)
+	}
+
+	opts := &gitlab.ListGroupProjectsOptions{
+		ListOptions: gitlab.ListOptions{
+			PerPage: 100,
+			Page:    1,
+		},
+		IncludeSubGroups: gitlab.Bool(true),
+		OrderBy:          gitlab.String("path"),
+		Sort:             gitlab.String("asc"),
+	}
+
+	for {
+		projects, resp, err := c.client.Groups.ListGroupProjects(group.ID, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list projects in group %s: %w", groupPath, err)
+		}
+
+		for _, project := range projects {
+			if strings.HasPrefix(project.PathWithNamespace, groupPath+"/") || project.PathWithNamespace == groupPath {
+				repo := &Repository{
+					ID:            project.ID,
+					Name:          project.Name,
+					FullPath:      project.PathWithNamespace,
+					CloneURL:      project.HTTPURLToRepo,
+					SSHCloneURL:   project.SSHURLToRepo,
+					DefaultBranch: project.DefaultBranch,
+					WebURL:        project.WebURL,
+				}
+				allRepos = append(allRepos, repo)
+			}
+		}
+
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+
+	sort.Slice(allRepos, func(i, j int) bool {
+		return allRepos[i].FullPath < allRepos[j].FullPath
+	})
+
+	return allRepos, nil
 }

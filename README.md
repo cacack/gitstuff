@@ -9,12 +9,36 @@ A comprehensive Go CLI application for managing GitLab repositories. This tool a
 
 ## Quick Start
 
+**Linux x86_64:**
 ```bash
-# Download and install GitStuff
-curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/') -o gitstuff
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-amd64 -o gitstuff
 chmod +x gitstuff
 sudo mv gitstuff /usr/local/bin/
+```
 
+**Linux ARM64:**
+```bash
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-arm64 -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
+```
+
+**macOS x86_64:**
+```bash
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-amd64 -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
+```
+
+**macOS ARM64 (M1/M2):**
+```bash
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-arm64 -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
+```
+
+**Then configure and use:**
+```bash
 # Configure your GitLab connection
 gitstuff config
 
@@ -28,6 +52,7 @@ gitstuff clone --all
 ## Features
 
 - **List Repositories**: View all repositories with hierarchical group structure
+- **Group Filtering**: Filter repositories by GitLab group to focus on specific teams or projects
 - **Clone Management**: Download single repositories or all at once
 - **Status Tracking**: See which repos are cloned and their current branch
 - **Group Structure**: Maintains exact GitLab group/subgroup organization
@@ -36,23 +61,41 @@ gitstuff clone --all
 
 ## Installation
 
+Choose the appropriate command for your platform:
+
+**Linux x86_64:**
+
 ```bash
-# Download and install GitStuff
-curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/') -o gitstuff
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-amd64 -o gitstuff
 chmod +x gitstuff
 sudo mv gitstuff /usr/local/bin/
 ```
 
-**Manual download:**
+**Linux ARM64:**
 
-Download the latest release for your platform from the [releases page](https://github.com/neilfarmer/gitstuff/releases/latest):
+```bash
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-arm64 -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
+```
 
-| Platform | Architecture  | Download Link                                                                                                                |
-| -------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Linux    | x64           | [gitstuff-linux-amd64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-amd64)   |
-| Linux    | ARM64         | [gitstuff-linux-arm64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-linux-arm64)   |
-| macOS    | x64           | [gitstuff-darwin-amd64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-amd64) |
-| macOS    | ARM64 (M1/M2) | [gitstuff-darwin-arm64](https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-arm64) |
+**macOS x86_64:**
+
+```bash
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-amd64 -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
+```
+
+**macOS ARM64 (M1/M2):**
+
+```bash
+curl -L https://github.com/neilfarmer/gitstuff/releases/latest/download/gitstuff-darwin-arm64 -o gitstuff
+chmod +x gitstuff
+sudo mv gitstuff /usr/local/bin/
+```
+
+Or download directly from the [releases page](https://github.com/neilfarmer/gitstuff/releases/latest).
 
 ### Build from Source
 
@@ -87,6 +130,7 @@ This will prompt you for:
 - **Access Token**: Your GitLab personal access token
 - **Base Directory**: Local directory for cloned repositories (default: `~/gitlab-repos`)
 - **SSL Certificate Verification**: Whether to skip SSL verification for self-signed certificates
+- **Default Group Filter**: Optional group to filter repositories by default (e.g., `team-a` or `team-a/backend`)
 
 > **Note**: The CLI automatically adds `https://` to URLs that don't specify a protocol.
 
@@ -192,6 +236,7 @@ Configure GitLab connection settings.
 - `-t, --token`: GitLab access token
 - `-d, --base-dir`: Base directory for repositories
 - `-k, --insecure`: Skip SSL certificate verification (for self-signed certificates)
+- `-g, --group`: Default group to filter repositories (optional)
 
 ### `gitstuff list`
 
@@ -202,6 +247,7 @@ List all GitLab repositories with status information.
 - `-t, --tree`: Display in tree structure with groups
 - `-s, --status`: Show local repository status (default: true)
 - `-v, --verbose`: Show additional details like URLs
+- `-g, --group`: Filter repositories to only those in the specified group
 
 ### `gitstuff clone`
 
@@ -234,6 +280,27 @@ gitstuff clone --all
 
 # 4. Later, update all repositories
 gitstuff clone --all --update
+```
+
+### Group Filtering
+
+Filter repositories by GitLab group to focus on specific teams or projects:
+
+```bash
+# List repositories only in the "backend" group
+gitstuff list --group backend
+
+# List repositories in a nested group
+gitstuff list --group team-a/backend
+
+# Use tree view with group filtering
+gitstuff list --tree --group team-a
+
+# Set a default group in config (applies to all commands)
+gitstuff config --group team-a
+
+# Override config default with command flag
+gitstuff list --group team-b
 ```
 
 ### Working with Specific Repositories

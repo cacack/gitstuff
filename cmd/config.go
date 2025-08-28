@@ -26,6 +26,7 @@ func init() {
 	configCmd.Flags().StringP("token", "t", "", "GitLab access token")
 	configCmd.Flags().StringP("base-dir", "d", "", "Base directory for cloned repositories")
 	configCmd.Flags().BoolP("insecure", "k", false, "Skip SSL certificate verification (for self-signed certificates)")
+	configCmd.Flags().StringP("group", "g", "", "Default group to filter repositories (optional)")
 }
 
 func runConfig(cmd *cobra.Command, args []string) error {
@@ -33,6 +34,7 @@ func runConfig(cmd *cobra.Command, args []string) error {
 	token, _ := cmd.Flags().GetString("token")
 	baseDir, _ := cmd.Flags().GetString("base-dir")
 	insecure, _ := cmd.Flags().GetBool("insecure")
+	group, _ := cmd.Flags().GetString("group")
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -65,5 +67,11 @@ func runConfig(cmd *cobra.Command, args []string) error {
 		insecure = response == "y" || response == "yes"
 	}
 
-	return config.Create(url, token, baseDir, insecure)
+	if group == "" && !cmd.Flags().Changed("group") {
+		fmt.Print("Default group to filter repositories (optional, leave blank for all): ")
+		group, _ = reader.ReadString('\n')
+		group = strings.TrimSpace(group)
+	}
+
+	return config.Create(url, token, baseDir, insecure, group)
 }
