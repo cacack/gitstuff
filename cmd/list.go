@@ -66,7 +66,7 @@ func runList(cmd *cobra.Command, args []string) error {
 func displayRepositoryList(client GitLabClientInterface, cfg *config.Config, showStatus, showVerbose bool, groupFilter string) error {
 	var repos []*gitlab.Repository
 	var err error
-	
+
 	if groupFilter != "" {
 		repos, err = client.ListRepositoriesInGroup(groupFilter)
 	} else {
@@ -112,7 +112,7 @@ func displayRepositoryTree(client GitLabClientInterface, cfg *config.Config, sho
 		displayFilteredTree(tree, groupFilter, cfg, showStatus, showVerbose)
 	} else {
 		fmt.Println("Repository tree structure:")
-		
+
 		if len(tree.Repositories) > 0 {
 			fmt.Println("Root repositories:")
 			for _, repo := range tree.Repositories {
@@ -155,10 +155,10 @@ func displayFilteredTree(tree *gitlab.RepositoryTree, groupFilter string, cfg *c
 
 func findGroupInTree(tree *gitlab.RepositoryTree, groupPath string) *gitlab.GroupNode {
 	parts := strings.Split(groupPath, "/")
-	
+
 	current := tree.Groups
 	var currentNode *gitlab.GroupNode
-	
+
 	for _, part := range parts {
 		if node, exists := current[part]; exists {
 			currentNode = node
@@ -167,7 +167,7 @@ func findGroupInTree(tree *gitlab.RepositoryTree, groupPath string) *gitlab.Grou
 			return nil
 		}
 	}
-	
+
 	return currentNode
 }
 

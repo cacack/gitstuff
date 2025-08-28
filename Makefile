@@ -5,7 +5,7 @@
 #   make test   - Run all tests
 #   make help   - Show all available commands
 
-.PHONY: build test test-verbose lint clean help install
+.PHONY: build test test-verbose lint clean help install format fmt check-format
 
 # Default target
 help:
@@ -14,6 +14,9 @@ help:
 	@echo "  make test         - Run all tests"
 	@echo "  make test-verbose - Run tests with verbose output"
 	@echo "  make lint         - Run golangci-lint"
+	@echo "  make format       - Format all Go code using gofmt and goimports"
+	@echo "  make fmt          - Alias for format"
+	@echo "  make check-format - Check if code is properly formatted (CI use)"
 	@echo "  make clean        - Remove built binaries"
 	@echo "  make install      - Build and install to /usr/local/bin"
 	@echo "  make help         - Show this help message"
@@ -57,3 +60,38 @@ install: build
 	@echo "Installing gitstuff to /usr/local/bin..."
 	sudo cp gitstuff /usr/local/bin/
 	@echo "✅ Installation complete! You can now run 'gitstuff' from anywhere"
+
+# Format all Go code
+format:
+	@echo "Formatting Go code..."
+	@echo "Running gofmt..."
+	gofmt -w .
+	@echo "Running goimports..."
+	@if ! command -v goimports >/dev/null 2>&1; then \
+		echo "Installing goimports..."; \
+		go install golang.org/x/tools/cmd/goimports@latest; \
+	fi
+	$$(go env GOPATH)/bin/goimports -w .
+	@echo "✅ Code formatting complete!"
+
+# Alias for format
+fmt: format
+
+# Check if code is properly formatted (for CI)
+check-format:
+	@echo "Checking code formatting..."
+	@if [ -n "$$(gofmt -l .)" ]; then \
+		echo "❌ Code is not properly formatted. Run 'make format' to fix:"; \
+		gofmt -l .; \
+		exit 1; \
+	fi
+	@if ! command -v goimports >/dev/null 2>&1; then \
+		echo "Installing goimports for import checking..."; \
+		go install golang.org/x/tools/cmd/goimports@latest; \
+	fi
+	@if [ -n "$$($$(go env GOPATH)/bin/goimports -l .)" ]; then \
+		echo "❌ Imports are not properly formatted. Run 'make format' to fix:"; \
+		$$(go env GOPATH)/bin/goimports -l .; \
+		exit 1; \
+	fi
+	@echo "✅ Code formatting is correct!"
