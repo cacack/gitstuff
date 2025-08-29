@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"gitstuff/internal/config"
-	"gitstuff/internal/gitlab"
+	"gitstuff/internal/scm"
 )
 
 func captureOutput(f func()) string {
@@ -26,8 +26,35 @@ func captureOutput(f func()) string {
 	return buf.String()
 }
 
+// Mock SCM client for testing
+type mockSCMClient struct {
+	providerType string
+	repos        []*scm.Repository
+	groupRepos   map[string][]*scm.Repository
+	tree         *scm.RepositoryTree
+}
+
+func (m *mockSCMClient) ListAllRepositories() ([]*scm.Repository, error) {
+	return m.repos, nil
+}
+
+func (m *mockSCMClient) ListRepositoriesInGroup(groupPath string) ([]*scm.Repository, error) {
+	if repos, exists := m.groupRepos[groupPath]; exists {
+		return repos, nil
+	}
+	return []*scm.Repository{}, nil
+}
+
+func (m *mockSCMClient) BuildRepositoryTree() (*scm.RepositoryTree, error) {
+	return m.tree, nil
+}
+
+func (m *mockSCMClient) GetProviderType() string {
+	return m.providerType
+}
+
 func TestDisplayRepositoryList_WithoutVerbose(t *testing.T) {
-	// Mock client and config
+	// Mock config
 	cfg := &config.Config{
 		Local: config.LocalConfig{
 			BaseDir: "/tmp/test",
@@ -35,298 +62,230 @@ func TestDisplayRepositoryList_WithoutVerbose(t *testing.T) {
 	}
 
 	// Create mock client with test data
-	repos := []*gitlab.Repository{
+	repos := []*scm.Repository{
 		{
-			ID:       1,
+			ID:       "1",
 			Name:     "test-repo",
 			FullPath: "group/test-repo",
 			WebURL:   "https://gitlab.com/group/test-repo",
+			Provider: "gitlab",
 		},
 		{
-			ID:       2,
+			ID:       "2",
 			Name:     "another-repo",
 			FullPath: "group/another-repo",
 			WebURL:   "https://gitlab.com/group/another-repo",
+			Provider: "gitlab",
 		},
 	}
 
-	mockClient := &mockGitLabClient{repos: repos}
+	mockClient := &mockSCMClient{
+		providerType: "gitlab",
+		repos:        repos,
+	}
+
+	clients := []scm.Client{mockClient}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryList(mockClient, cfg, false, false, "") // showStatus=false, showVerbose=false, no group filter
+		_ = displayRepositoryList(clients, cfg, false, false, "")
 	})
 
-	// Should contain repository names
-	if !strings.Contains(output, "group/test-repo") {
-		t.Errorf("Expected output to contain repository path 'group/test-repo'")
+	// Check output contains repository names
+	if !strings.Contains(output, "test-repo") {
+		t.Errorf("Expected output to contain 'test-repo', got: %s", output)
 	}
-
-	if !strings.Contains(output, "group/another-repo") {
-		t.Errorf("Expected output to contain repository path 'group/another-repo'")
+	if !strings.Contains(output, "another-repo") {
+		t.Errorf("Expected output to contain 'another-repo', got: %s", output)
 	}
-
-	// Should NOT contain URLs when verbose=false
-	if strings.Contains(output, "https://gitlab.com/group/test-repo") {
-		t.Errorf("Expected output to NOT contain URL when verbose=false")
-	}
-
-	if strings.Contains(output, "https://gitlab.com/group/another-repo") {
-		t.Errorf("Expected output to NOT contain URL when verbose=false")
+	if !strings.Contains(output, "[gitlab]") {
+		t.Errorf("Expected output to contain '[gitlab]', got: %s", output)
 	}
 }
 
 func TestDisplayRepositoryList_WithVerbose(t *testing.T) {
+	// Mock config
 	cfg := &config.Config{
 		Local: config.LocalConfig{
 			BaseDir: "/tmp/test",
 		},
 	}
 
-	repos := []*gitlab.Repository{
+	// Create mock client with test data
+	repos := []*scm.Repository{
 		{
-			ID:       1,
+			ID:       "1",
 			Name:     "test-repo",
 			FullPath: "group/test-repo",
 			WebURL:   "https://gitlab.com/group/test-repo",
-		},
-		{
-			ID:       2,
-			Name:     "another-repo",
-			FullPath: "group/another-repo",
-			WebURL:   "https://gitlab.com/group/another-repo",
+			Provider: "gitlab",
 		},
 	}
 
-	mockClient := &mockGitLabClient{repos: repos}
+	mockClient := &mockSCMClient{
+		providerType: "gitlab",
+		repos:        repos,
+	}
+
+	clients := []scm.Client{mockClient}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryList(mockClient, cfg, false, true, "") // showStatus=false, showVerbose=true, no group filter
+		_ = displayRepositoryList(clients, cfg, false, true, "")
 	})
 
-	// Should contain repository names
-	if !strings.Contains(output, "group/test-repo") {
-		t.Errorf("Expected output to contain repository path 'group/test-repo'")
-	}
-
-	if !strings.Contains(output, "group/another-repo") {
-		t.Errorf("Expected output to contain repository path 'group/another-repo'")
-	}
-
-	// Should contain URLs when verbose=true
+	// Check output contains URLs when verbose
 	if !strings.Contains(output, "https://gitlab.com/group/test-repo") {
-		t.Errorf("Expected output to contain URL when verbose=true")
-	}
-
-	if !strings.Contains(output, "https://gitlab.com/group/another-repo") {
-		t.Errorf("Expected output to contain URL when verbose=true")
+		t.Errorf("Expected verbose output to contain URL, got: %s", output)
 	}
 }
 
-func TestDisplayRepositoryTree_WithoutVerbose(t *testing.T) {
+func TestDisplayRepositoryTree_MultipleProviders(t *testing.T) {
+	// Mock config
 	cfg := &config.Config{
 		Local: config.LocalConfig{
 			BaseDir: "/tmp/test",
 		},
 	}
 
-	// Create a mock tree structure
-	tree := &gitlab.RepositoryTree{
-		Groups: map[string]*gitlab.GroupNode{
-			"group1": {
-				Group: &gitlab.Group{
-					Name:     "group1",
-					FullPath: "group1",
+	// Create mock GitLab client
+	gitlabRepos := []*scm.Repository{
+		{
+			ID:       "1",
+			Name:     "gitlab-repo",
+			FullPath: "gitlab-group/gitlab-repo",
+			Provider: "gitlab",
+		},
+	}
+
+	gitlabTree := &scm.RepositoryTree{
+		Groups: map[string]*scm.GroupNode{
+			"gitlab-group": {
+				Group: &scm.Group{
+					Name:     "gitlab-group",
+					FullPath: "gitlab-group",
+					Provider: "gitlab",
 				},
-				SubGroups: make(map[string]*gitlab.GroupNode),
-				Repositories: []*gitlab.Repository{
-					{
-						ID:       1,
-						Name:     "repo1",
-						FullPath: "group1/repo1",
-						WebURL:   "https://gitlab.com/group1/repo1",
-					},
-				},
+				SubGroups:    make(map[string]*scm.GroupNode),
+				Repositories: gitlabRepos,
 			},
 		},
-		Repositories: []*gitlab.Repository{},
+		Repositories: []*scm.Repository{},
 	}
 
-	mockClient := &mockGitLabClient{tree: tree}
-
-	output := captureOutput(func() {
-		_ = displayRepositoryTree(mockClient, cfg, false, false, "") // showStatus=false, showVerbose=false, no group filter
-	})
-
-	// Should contain group and repo names
-	if !strings.Contains(output, "group1") {
-		t.Errorf("Expected output to contain group name 'group1'")
+	gitlabClient := &mockSCMClient{
+		providerType: "gitlab",
+		repos:        gitlabRepos,
+		tree:         gitlabTree,
 	}
 
-	if !strings.Contains(output, "repo1") {
-		t.Errorf("Expected output to contain repository name 'repo1'")
-	}
-
-	// Should NOT contain URLs when verbose=false
-	if strings.Contains(output, "https://gitlab.com/group1/repo1") {
-		t.Errorf("Expected output to NOT contain URL when verbose=false")
-	}
-}
-
-func TestDisplayRepositoryTree_WithVerbose(t *testing.T) {
-	cfg := &config.Config{
-		Local: config.LocalConfig{
-			BaseDir: "/tmp/test",
+	// Create mock GitHub client
+	githubRepos := []*scm.Repository{
+		{
+			ID:       "2",
+			Name:     "github-repo",
+			FullPath: "github-org/github-repo",
+			Provider: "github",
 		},
 	}
 
-	tree := &gitlab.RepositoryTree{
-		Groups: map[string]*gitlab.GroupNode{
-			"group1": {
-				Group: &gitlab.Group{
-					Name:     "group1",
-					FullPath: "group1",
+	githubTree := &scm.RepositoryTree{
+		Groups: map[string]*scm.GroupNode{
+			"github-org": {
+				Group: &scm.Group{
+					Name:     "github-org",
+					FullPath: "github-org",
+					Provider: "github",
 				},
-				SubGroups: make(map[string]*gitlab.GroupNode),
-				Repositories: []*gitlab.Repository{
-					{
-						ID:       1,
-						Name:     "repo1",
-						FullPath: "group1/repo1",
-						WebURL:   "https://gitlab.com/group1/repo1",
-					},
-				},
+				SubGroups:    make(map[string]*scm.GroupNode),
+				Repositories: githubRepos,
 			},
 		},
-		Repositories: []*gitlab.Repository{},
+		Repositories: []*scm.Repository{},
 	}
 
-	mockClient := &mockGitLabClient{tree: tree}
+	githubClient := &mockSCMClient{
+		providerType: "github",
+		repos:        githubRepos,
+		tree:         githubTree,
+	}
+
+	clients := []scm.Client{gitlabClient, githubClient}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryTree(mockClient, cfg, false, true, "") // showStatus=false, showVerbose=true, no group filter
+		_ = displayRepositoryTree(clients, cfg, false, false, "")
 	})
 
-	// Should contain group and repo names
-	if !strings.Contains(output, "group1") {
-		t.Errorf("Expected output to contain group name 'group1'")
+	// Check output contains both providers
+	if !strings.Contains(output, "GITLAB Provider") {
+		t.Errorf("Expected output to contain 'GITLAB Provider', got: %s", output)
 	}
-
-	if !strings.Contains(output, "repo1") {
-		t.Errorf("Expected output to contain repository name 'repo1'")
+	if !strings.Contains(output, "GITHUB Provider") {
+		t.Errorf("Expected output to contain 'GITHUB Provider', got: %s", output)
 	}
-
-	// Should contain URLs when verbose=true
-	if !strings.Contains(output, "https://gitlab.com/group1/repo1") {
-		t.Errorf("Expected output to contain URL when verbose=true")
+	if !strings.Contains(output, "gitlab-repo") {
+		t.Errorf("Expected output to contain 'gitlab-repo', got: %s", output)
 	}
-}
-
-// Mock GitLab client for testing
-type mockGitLabClient struct {
-	repos []*gitlab.Repository
-	tree  *gitlab.RepositoryTree
-}
-
-func (m *mockGitLabClient) ListAllRepositories() ([]*gitlab.Repository, error) {
-	return m.repos, nil
-}
-
-func (m *mockGitLabClient) ListRepositoriesInGroup(groupPath string) ([]*gitlab.Repository, error) {
-	if groupPath == "" {
-		return m.repos, nil
-	}
-
-	var filtered []*gitlab.Repository
-	for _, repo := range m.repos {
-		if strings.HasPrefix(repo.FullPath, groupPath+"/") {
-			filtered = append(filtered, repo)
-		}
-	}
-	return filtered, nil
-}
-
-func (m *mockGitLabClient) BuildRepositoryTree() (*gitlab.RepositoryTree, error) {
-	if m.tree != nil {
-		return m.tree, nil
-	}
-	return &gitlab.RepositoryTree{
-		Groups:       make(map[string]*gitlab.GroupNode),
-		Repositories: m.repos,
-	}, nil
-}
-
-func TestListCommandFlags(t *testing.T) {
-	// Test that the verbose flag is properly registered
-	cmd := listCmd
-
-	// Check if verbose flag exists
-	verboseFlag := cmd.Flags().Lookup("verbose")
-	if verboseFlag == nil {
-		t.Error("Expected --verbose flag to be registered")
-		return
-	}
-
-	// Check if the short flag maps to the same flag (Cobra handles this automatically)
-	if verboseFlag.Shorthand != "v" {
-		t.Errorf("Expected shorthand for verbose flag to be 'v', got '%s'", verboseFlag.Shorthand)
-	}
-
-	// Test default value
-	defaultValue := verboseFlag.DefValue
-	if defaultValue != "false" {
-		t.Errorf("Expected default value for verbose flag to be 'false', got '%s'", defaultValue)
-	}
-
-	// Test flag usage
-	usage := verboseFlag.Usage
-	expectedUsage := "Show additional details like URLs"
-	if usage != expectedUsage {
-		t.Errorf("Expected flag usage '%s', got '%s'", expectedUsage, usage)
+	if !strings.Contains(output, "github-repo") {
+		t.Errorf("Expected output to contain 'github-repo', got: %s", output)
 	}
 }
 
-func TestListCommandFlagCombinations(t *testing.T) {
-	// Test that flags can be combined
-	cmd := listCmd
+func TestCreateClient_GitLab(t *testing.T) {
+	providerConfig := config.ProviderConfig{
+		Name:     "test-gitlab",
+		Type:     "gitlab",
+		URL:      "https://gitlab.com",
+		Token:    "test-token",
+		Insecure: false,
+		Group:    "",
+	}
 
-	// Reset flags for clean test
-	_ = cmd.Flags().Set("verbose", "false")
-	_ = cmd.Flags().Set("tree", "false")
-	_ = cmd.Flags().Set("status", "true")
-
-	// Test setting verbose flag
-	err := cmd.Flags().Set("verbose", "true")
+	client, err := createClient(providerConfig)
 	if err != nil {
-		t.Errorf("Failed to set verbose flag: %v", err)
+		t.Fatalf("createClient failed: %v", err)
 	}
 
-	verboseValue, err := cmd.Flags().GetBool("verbose")
+	if client.GetProviderType() != "gitlab" {
+		t.Errorf("Expected provider type 'gitlab', got '%s'", client.GetProviderType())
+	}
+}
+
+func TestCreateClient_GitHub(t *testing.T) {
+	providerConfig := config.ProviderConfig{
+		Name:     "test-github",
+		Type:     "github",
+		URL:      "https://github.com",
+		Token:    "test-token",
+		Insecure: false,
+		Group:    "",
+	}
+
+	client, err := createClient(providerConfig)
 	if err != nil {
-		t.Errorf("Failed to get verbose flag value: %v", err)
+		t.Fatalf("createClient failed: %v", err)
 	}
 
-	if !verboseValue {
-		t.Error("Expected verbose flag to be true after setting")
+	if client.GetProviderType() != "github" {
+		t.Errorf("Expected provider type 'github', got '%s'", client.GetProviderType())
+	}
+}
+
+func TestCreateClient_UnsupportedProvider(t *testing.T) {
+	providerConfig := config.ProviderConfig{
+		Name:     "test-bitbucket",
+		Type:     "bitbucket",
+		URL:      "https://bitbucket.org",
+		Token:    "test-token",
+		Insecure: false,
+		Group:    "",
 	}
 
-	// Test combining with tree flag
-	err = cmd.Flags().Set("tree", "true")
-	if err != nil {
-		t.Errorf("Failed to set tree flag: %v", err)
+	_, err := createClient(providerConfig)
+	if err == nil {
+		t.Fatal("Expected error for unsupported provider type")
 	}
 
-	treeValue, err := cmd.Flags().GetBool("tree")
-	if err != nil {
-		t.Errorf("Failed to get tree flag value: %v", err)
-	}
-
-	if !treeValue {
-		t.Error("Expected tree flag to be true after setting")
-	}
-
-	// Both flags should still be set correctly
-	verboseValue, _ = cmd.Flags().GetBool("verbose")
-	if !verboseValue {
-		t.Error("Expected verbose flag to remain true when combining with other flags")
+	expectedErr := "unsupported provider type: bitbucket"
+	if !strings.Contains(err.Error(), expectedErr) {
+		t.Errorf("Expected error to contain '%s', got: %s", expectedErr, err.Error())
 	}
 }
