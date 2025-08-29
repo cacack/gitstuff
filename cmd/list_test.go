@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gitstuff/internal/config"
+	"gitstuff/internal/git"
 	"gitstuff/internal/scm"
 )
 
@@ -113,11 +114,12 @@ func TestDisplayRepositoryList_WithVerbose(t *testing.T) {
 	// Create mock client with test data
 	repos := []*scm.Repository{
 		{
-			ID:       "1",
-			Name:     "test-repo",
-			FullPath: "group/test-repo",
-			WebURL:   "https://gitlab.com/group/test-repo",
-			Provider: "gitlab",
+			ID:          "1",
+			Name:        "test-repo",
+			FullPath:    "group/test-repo",
+			WebURL:      "https://gitlab.com/group/test-repo",
+			SSHCloneURL: "git@gitlab.com:group/test-repo.git",
+			Provider:    "gitlab",
 		},
 	}
 
@@ -132,9 +134,12 @@ func TestDisplayRepositoryList_WithVerbose(t *testing.T) {
 		_ = displayRepositoryList(clients, cfg, false, true, "")
 	})
 
-	// Check output contains URLs when verbose
-	if !strings.Contains(output, "https://gitlab.com/group/test-repo") {
-		t.Errorf("Expected verbose output to contain URL, got: %s", output)
+	// Check output contains both Web and SSH URLs when verbose
+	if !strings.Contains(output, "Web URL: https://gitlab.com/group/test-repo") {
+		t.Errorf("Expected verbose output to contain Web URL, got: %s", output)
+	}
+	if !strings.Contains(output, "SSH URL: git@gitlab.com:group/test-repo.git") {
+		t.Errorf("Expected verbose output to contain SSH URL, got: %s", output)
 	}
 }
 
@@ -226,6 +231,175 @@ func TestDisplayRepositoryTree_MultipleProviders(t *testing.T) {
 	}
 	if !strings.Contains(output, "github-repo") {
 		t.Errorf("Expected output to contain 'github-repo', got: %s", output)
+	}
+}
+
+func TestDisplayRepositoryTree_WithVerbose(t *testing.T) {
+	// Mock config
+	cfg := &config.Config{
+		Local: config.LocalConfig{
+			BaseDir: "/tmp/test",
+		},
+	}
+
+	// Create mock GitLab client with verbose data
+	gitlabRepos := []*scm.Repository{
+		{
+			ID:          "1",
+			Name:        "verbose-repo",
+			FullPath:    "test-group/verbose-repo",
+			WebURL:      "https://gitlab.com/test-group/verbose-repo",
+			SSHCloneURL: "git@gitlab.com:test-group/verbose-repo.git",
+			Provider:    "gitlab",
+		},
+	}
+
+	gitlabTree := &scm.RepositoryTree{
+		Groups: map[string]*scm.GroupNode{
+			"test-group": {
+				Group: &scm.Group{
+					Name:     "test-group",
+					FullPath: "test-group",
+					Provider: "gitlab",
+				},
+				SubGroups:    make(map[string]*scm.GroupNode),
+				Repositories: gitlabRepos,
+			},
+		},
+		Repositories: []*scm.Repository{},
+	}
+
+	gitlabClient := &mockSCMClient{
+		providerType: "gitlab",
+		repos:        gitlabRepos,
+		tree:         gitlabTree,
+	}
+
+	clients := []scm.Client{gitlabClient}
+
+	output := captureOutput(func() {
+		_ = displayRepositoryTree(clients, cfg, false, true, "")
+	})
+
+	// Check output contains both Web and SSH URLs when verbose in tree mode
+	if !strings.Contains(output, "Web URL: https://gitlab.com/test-group/verbose-repo") {
+		t.Errorf("Expected tree verbose output to contain Web URL, got: %s", output)
+	}
+	if !strings.Contains(output, "SSH URL: git@gitlab.com:test-group/verbose-repo.git") {
+		t.Errorf("Expected tree verbose output to contain SSH URL, got: %s", output)
+	}
+}
+
+func TestGetCompactStatus_DefaultBranches(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        *git.Status
+		defaultBranch string
+		expected      string
+	}{
+		{
+			name: "not cloned",
+			status: &git.Status{
+				Exists: false,
+			},
+			defaultBranch: "main",
+			expected:      "❌ Not cloned",
+		},
+		{
+			name: "not git repo",
+			status: &git.Status{
+				Exists:    true,
+				IsGitRepo: false,
+			},
+			defaultBranch: "main",
+			expected:      "⚠️ Not a git repo",
+		},
+		{
+			name: "main branch clean",
+			status: &git.Status{
+				Exists:        true,
+				IsGitRepo:     true,
+				CurrentBranch: "main",
+				HasChanges:    false,
+			},
+			defaultBranch: "main",
+			expected:      "✅",
+		},
+		{
+			name: "master branch clean",
+			status: &git.Status{
+				Exists:        true,
+				IsGitRepo:     true,
+				CurrentBranch: "master",
+				HasChanges:    false,
+			},
+			defaultBranch: "master",
+			expected:      "✅",
+		},
+		{
+			name: "default branch with changes",
+			status: &git.Status{
+				Exists:        true,
+				IsGitRepo:     true,
+				CurrentBranch: "main",
+				HasChanges:    true,
+			},
+			defaultBranch: "main",
+			expected:      "✅ 🔄",
+		},
+		{
+			name: "feature branch clean",
+			status: &git.Status{
+				Exists:        true,
+				IsGitRepo:     true,
+				CurrentBranch: "add-feature",
+				HasChanges:    false,
+			},
+			defaultBranch: "main",
+			expected:      "✅ (add-feature)",
+		},
+		{
+			name: "feature branch with changes",
+			status: &git.Status{
+				Exists:        true,
+				IsGitRepo:     true,
+				CurrentBranch: "add-feature",
+				HasChanges:    true,
+			},
+			defaultBranch: "main",
+			expected:      "✅ 🔄 (add-feature)",
+		},
+		{
+			name: "non-standard default branch",
+			status: &git.Status{
+				Exists:        true,
+				IsGitRepo:     true,
+				CurrentBranch: "develop",
+				HasChanges:    false,
+			},
+			defaultBranch: "develop",
+			expected:      "✅",
+		},
+		{
+			name: "feature branch on repo with non-standard default",
+			status: &git.Status{
+				Exists:        true,
+				IsGitRepo:     true,
+				CurrentBranch: "feature-branch",
+				HasChanges:    false,
+			},
+			defaultBranch: "develop",
+			expected:      "✅ (feature-branch)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getCompactStatus(tt.status, tt.defaultBranch)
+			if result != tt.expected {
+				t.Errorf("getCompactStatus() = %v, want %v", result, tt.expected)
+			}
+		})
 	}
 }
 

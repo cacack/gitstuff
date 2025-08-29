@@ -104,7 +104,8 @@ func displayRepositoryList(clients []scm.Client, cfg *config.Config, showStatus,
 		fmt.Printf("📁 [%s] %s\n", repo.Provider, repo.FullPath)
 
 		if showVerbose {
-			fmt.Printf("   URL: %s\n", repo.WebURL)
+			fmt.Printf("   Web URL: %s\n", repo.WebURL)
+			fmt.Printf("   SSH URL: %s\n", repo.SSHCloneURL)
 		}
 
 		if showStatus {
@@ -142,22 +143,24 @@ func displayRepositoryTree(clients []scm.Client, cfg *config.Config, showStatus,
 			if len(tree.Repositories) > 0 {
 				fmt.Println("Root repositories:")
 				for _, repo := range tree.Repositories {
-					fmt.Printf("📁 %s\n", repo.Name)
-
-					if showVerbose {
-						fmt.Printf("   URL: %s\n", repo.WebURL)
-					}
+					repoLine := fmt.Sprintf("📁 %s", repo.Name)
 
 					if showStatus {
 						localPath := filepath.Join(cfg.Local.BaseDir, repo.Provider, repo.FullPath)
 						status, err := git.GetRepositoryStatus(localPath)
 						if err != nil {
-							fmt.Printf("   Status: ❌ Error: %v\n", err)
+							repoLine += fmt.Sprintf(" - ❌ Error: %v", err)
 						} else {
-							displayStatus(status)
+							repoLine += " - " + getCompactStatus(status, repo.DefaultBranch)
 						}
 					}
-					fmt.Print("\n")
+
+					fmt.Println(repoLine)
+
+					if showVerbose {
+						fmt.Printf("   Web URL: %s\n", repo.WebURL)
+						fmt.Printf("   SSH URL: %s\n", repo.SSHCloneURL)
+					}
 				}
 			}
 
@@ -203,28 +206,60 @@ func displayGroup(group *scm.GroupNode, indent int, cfg *config.Config, showStat
 	fmt.Printf("%s📂 %s/\n", prefix, group.Group.Name)
 
 	for _, repo := range group.Repositories {
-		fmt.Printf("%s  📁 %s\n", prefix, repo.Name)
-
-		if showVerbose {
-			fmt.Printf("%s     URL: %s\n", prefix, repo.WebURL)
-		}
+		repoLine := fmt.Sprintf("%s  📁 %s", prefix, repo.Name)
 
 		if showStatus {
 			localPath := filepath.Join(cfg.Local.BaseDir, repo.Provider, repo.FullPath)
 			status, err := git.GetRepositoryStatus(localPath)
 			if err != nil {
-				fmt.Printf("%s     Status: ❌ Error: %v\n", prefix, err)
+				repoLine += fmt.Sprintf(" - ❌ Error: %v", err)
 			} else {
-				fmt.Printf("%s     ", prefix)
-				displayStatus(status)
+				repoLine += " - " + getCompactStatus(status, repo.DefaultBranch)
 			}
 		}
-		fmt.Print("\n")
+
+		fmt.Println(repoLine)
+
+		if showVerbose {
+			fmt.Printf("%s     Web URL: %s\n", prefix, repo.WebURL)
+			fmt.Printf("%s     SSH URL: %s\n", prefix, repo.SSHCloneURL)
+		}
 	}
 
 	for _, subGroup := range group.SubGroups {
 		displayGroup(subGroup, indent+1, cfg, showStatus, showVerbose)
 	}
+}
+
+func getCompactStatus(status *git.Status, defaultBranch string) string {
+	if !status.Exists {
+		return "❌ Not cloned"
+	}
+
+	if !status.IsGitRepo {
+		return "⚠️ Not a git repo"
+	}
+
+	result := "✅"
+	if status.HasChanges {
+		result += " 🔄"
+	}
+	if status.CurrentBranch != "" {
+		// Only show branch name if it's not the default branch and not main/master
+		if !isDefaultBranch(status.CurrentBranch, defaultBranch) {
+			result += fmt.Sprintf(" (%s)", status.CurrentBranch)
+		}
+	}
+	return result
+}
+
+func isDefaultBranch(currentBranch, defaultBranch string) bool {
+	// Check against the repo's actual default branch
+	if defaultBranch != "" && currentBranch == defaultBranch {
+		return true
+	}
+	// Also check against common default branch names
+	return currentBranch == "main" || currentBranch == "master"
 }
 
 func displayStatus(status *git.Status) {
