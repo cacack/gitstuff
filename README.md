@@ -5,7 +5,7 @@
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/neilfarmer/gitstuff)](https://github.com/neilfarmer/gitstuff/releases/latest)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/neilfarmer/gitstuff)](https://golang.org/)
 
-A comprehensive Go CLI application for managing GitLab repositories. This tool allows you to list all repositories in your GitLab instance, clone them individually or all at once, and check their local status including current working branch.
+A comprehensive Go CLI application for managing GitLab and GitHub repositories. This tool allows you to list all repositories across multiple SCM providers, clone them individually or all at once, and check their local status including current working branch.
 
 ## Quick Start
 
@@ -39,10 +39,10 @@ sudo mv gitstuff /usr/local/bin/
 
 **Then configure and use:**
 ```bash
-# Configure your GitLab connection
+# Configure your GitLab and/or GitHub connections
 gitstuff config
 
-# List your repositories
+# List your repositories from all providers
 gitstuff list
 
 # Clone all repositories
@@ -51,11 +51,12 @@ gitstuff clone --all
 
 ## Features
 
-- **List Repositories**: View all repositories with hierarchical group structure
-- **Group Filtering**: Filter repositories by GitLab group to focus on specific teams or projects
-- **Clone Management**: Download single repositories or all at once
+- **Multi-Provider Support**: Connect to both GitLab and GitHub simultaneously
+- **List Repositories**: View all repositories with hierarchical group/organization structure
+- **Group Filtering**: Filter repositories by GitLab group or GitHub organization
+- **Clone Management**: Download single repositories or all at once from any provider
 - **Status Tracking**: See which repos are cloned and their current branch
-- **Group Structure**: Maintains exact GitLab group/subgroup organization
+- **Provider-Aware Display**: Clear indication of which provider each repository comes from
 - **Flexible Authentication**: Supports both HTTPS and SSH cloning
 - **Update Support**: Pull latest changes for already cloned repositories
 
@@ -118,27 +119,44 @@ make install
 
 ## Configuration
 
-Before using the CLI, you need to configure your GitLab connection:
+The CLI supports both GitLab and GitHub providers. You can configure one or multiple providers:
 
 ```bash
 gitstuff config
 ```
 
-This will prompt you for:
+This will present a numbered menu to select which provider to add:
 
-- **GitLab URL**: Your GitLab instance URL (e.g., `https://gitlab.com` or just `gitlab.com`)
-- **Access Token**: Your GitLab personal access token
-- **Base Directory**: Local directory for cloned repositories (default: `~/gitlab-repos`)
-- **SSL Certificate Verification**: Whether to skip SSL verification for self-signed certificates
-- **Default Group Filter**: Optional group to filter repositories by default (e.g., `team-a` or `team-a/backend`)
+1. **GitLab**
+2. **GitHub**
+
+For each provider, you'll be prompted for:
+
+- **Provider Name**: A unique identifier for this provider (e.g., "gitlab-work", "github-personal")
+- **Provider URL**: 
+  - GitLab: Your GitLab instance URL (e.g., `https://gitlab.com` or `gitlab.example.com`)
+  - GitHub: Leave blank for github.com or enter GitHub Enterprise URL
+- **Access Token**: Your provider-specific access token
+- **Base Directory**: Local directory for cloned repositories (default: `~/gitstuff-repos`)
+- **SSL Certificate Verification**: Whether to skip SSL verification for self-signed certificates  
+- **Default Group/Organization Filter**: Optional filter for repositories
+
+After configuring one provider, you'll be asked if you want to add another provider.
 
 > **Note**: The CLI automatically adds `https://` to URLs that don't specify a protocol.
 
-### Creating a GitLab Access Token
+### Creating Access Tokens
 
+**For GitLab:**
 1. Go to your GitLab instance
 2. Navigate to User Settings > Access Tokens
 3. Create a token with at least `read_repository` scope
+4. Copy the token for use with the CLI
+
+**For GitHub:**
+1. Go to GitHub.com (or your GitHub Enterprise instance)
+2. Navigate to Settings > Developer settings > Personal access tokens > Tokens (classic)
+3. Generate a new token with `repo` scope for private repositories or `public_repo` for public only
 4. Copy the token for use with the CLI
 
 ### Alternative Configuration
@@ -146,21 +164,27 @@ This will prompt you for:
 You can also configure using command flags:
 
 ```bash
-gitstuff config --url https://gitlab.example.com --token your-token --base-dir /path/to/repos
+# Configure a GitLab provider
+gitstuff config --provider gitlab --name gitlab-work --url https://gitlab.example.com --token your-gitlab-token --base-dir /path/to/repos
 
-# For GitLab instances with self-signed certificates
-gitstuff config --url https://gitlab.example.com --token your-token --insecure
+# Configure a GitHub provider  
+gitstuff config --provider github --name github-personal --url https://github.com --token your-github-token
+
+# For instances with self-signed certificates
+gitstuff config --provider gitlab --name gitlab-work --url https://gitlab.example.com --token your-token --insecure
 ```
 
 ## Usage
 
 ### List All Repositories
 
+The list command displays repositories from all configured providers:
+
 ```bash
-# Simple list view (shows folder structure and status, no URLs)
+# Simple list view (shows folder structure, status, and provider)
 gitstuff list
 
-# Tree view with group structure
+# Tree view with group/organization structure (organized by provider)
 gitstuff list --tree
 
 # Show additional details like URLs
@@ -168,6 +192,23 @@ gitstuff list --verbose
 
 # List without status information
 gitstuff list --status=false
+
+# Filter by specific group/organization (works across all providers)
+gitstuff list --group my-team
+```
+
+**Example output:**
+```
+Found 15 repositories:
+
+📁 [gitlab] company/backend-api
+   Status: ✅ Cloned (branch: main) 🔄 Has uncommitted changes
+
+📁 [github] myuser/personal-project  
+   Status: ❌ Not cloned
+
+📁 [gitlab] team/frontend-app
+   Status: ✅ Cloned (branch: develop)
 ```
 
 ### Clone Repositories
@@ -188,18 +229,22 @@ gitstuff clone --all --update
 
 ## Repository Structure
 
-The CLI maintains the exact GitLab group structure on your filesystem:
+The CLI maintains the exact provider group/organization structure on your filesystem:
 
 ```text
-~/gitlab-repos/
-├── group1/
+~/gitstuff-repos/
+├── gitlab-group1/
 │   ├── project1/
 │   ├── project2/
 │   └── subgroup1/
 │       └── nested-project/
-├── group2/
+├── gitlab-group2/
 │   └── another-project/
-└── standalone-project/
+├── github-org/
+│   ├── public-repo/
+│   └── private-repo/
+└── github-user/
+    └── personal-project/
 ```
 
 ## Repository Status Information
@@ -214,93 +259,111 @@ The CLI shows comprehensive status for each repository:
 
 ## Configuration File
 
-Configuration is stored in `~/.gitstuff.yaml`:
+Configuration is stored in `~/.gitstuff.yaml` and supports multiple providers:
 
 ```yaml
-gitlab:
-  url: "https://gitlab.example.com"
-  token: "your-access-token"
+providers:
+  - name: "gitlab-work"
+    type: "gitlab"
+    url: "https://gitlab.company.com"
+    token: "your-gitlab-token"
+    insecure: false
+    group: "backend-team"
+  - name: "github-personal"
+    type: "github" 
+    url: "https://github.com"
+    token: "your-github-token"
+    insecure: false
+    group: "myorg"
 local:
-  base_dir: "/path/to/gitlab-repos"
+  base_dir: "/path/to/gitstuff-repos"
 ```
 
 ## Commands Reference
 
 ### `gitstuff config`
 
-Configure GitLab connection settings.
+Configure SCM provider connections (GitLab and/or GitHub).
 
 **Flags:**
 
-- `-u, --url`: GitLab instance URL
-- `-t, --token`: GitLab access token
+- `-p, --provider`: Provider type (`gitlab` or `github`)
+- `-n, --name`: Provider name (identifier for multiple providers)
+- `-u, --url`: Provider instance URL
+- `-t, --token`: Provider access token
 - `-d, --base-dir`: Base directory for repositories
 - `-k, --insecure`: Skip SSL certificate verification (for self-signed certificates)
-- `-g, --group`: Default group to filter repositories (optional)
+- `-g, --group`: Default group/organization to filter repositories (optional)
 
 ### `gitstuff list`
 
-List all GitLab repositories with status information.
+List repositories from all configured providers with status information.
 
 **Flags:**
 
-- `-t, --tree`: Display in tree structure with groups
+- `-t, --tree`: Display in tree structure organized by provider and groups/organizations
 - `-s, --status`: Show local repository status (default: true)
 - `-v, --verbose`: Show additional details like URLs
-- `-g, --group`: Filter repositories to only those in the specified group
+- `-g, --group`: Filter repositories to only those in the specified group/organization
 
 ### `gitstuff clone`
 
-Clone GitLab repositories.
+Clone repositories from configured providers.
 
 **Usage:**
 
 - `gitstuff clone [repository-path]`: Clone specific repository
-- `gitstuff clone --all`: Clone all repositories
+- `gitstuff clone --all`: Clone all repositories from all providers
 
 **Flags:**
 
-- `-a, --all`: Clone all repositories
+- `-a, --all`: Clone all repositories from all providers
 - `-s, --ssh`: Use SSH for cloning (default: HTTPS)
 - `-u, --update`: Pull latest changes for existing repositories
+
+**Note:** Clone command currently supports GitLab providers only. GitHub support for cloning is coming in a future update.
 
 ## Examples
 
 ### Basic Workflow
 
 ```bash
-# 1. Configure the CLI
+# 1. Configure your first provider (GitLab or GitHub)
 gitstuff config
 
-# 2. List all repositories to see what's available
+# 2. Optionally add additional providers
+gitstuff config  # This will ask if you want to add another provider
+
+# 3. List all repositories from all providers to see what's available
 gitstuff list --tree
 
-# 3. Clone all repositories
+# 4. Clone all repositories (currently GitLab only)
 gitstuff clone --all
 
-# 4. Later, update all repositories
+# 5. Later, update all repositories
 gitstuff clone --all --update
 ```
 
-### Group Filtering
+### Group/Organization Filtering
 
-Filter repositories by GitLab group to focus on specific teams or projects:
+Filter repositories by GitLab group or GitHub organization across all providers:
 
 ```bash
-# List repositories only in the "backend" group
+# List repositories only in the "backend" group/organization
 gitstuff list --group backend
 
-# List repositories in a nested group
+# List repositories in a nested GitLab group
 gitstuff list --group team-a/backend
 
-# Use tree view with group filtering
+# Use tree view with group/organization filtering
 gitstuff list --tree --group team-a
 
-# Set a default group in config (applies to all commands)
-gitstuff config --group team-a
+# Set a default group/organization in provider config
+gitstuff config --provider gitlab --name work --group team-backend
+gitstuff config --provider github --name personal --group myorg
 
 # Override config default with command flag
-gitstuff list --group team-b
+gitstuff list --group different-team
 ```
 
 ### Working with Specific Repositories
@@ -320,8 +383,8 @@ gitstuff clone mygroup/myproject --ssh
 
 - Go 1.19 or later
 - Git installed and available in PATH
-- GitLab access token with appropriate permissions
-- Network access to your GitLab instance
+- Access tokens for your SCM providers (GitLab and/or GitHub) with appropriate permissions
+- Network access to your SCM provider instances
 
 ## Testing
 

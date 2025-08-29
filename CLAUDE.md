@@ -79,20 +79,6 @@ go test ./cmd ./internal/config ./internal/git ./internal/gitlab
 - Provides clean, clear output
 - No confusing warnings about missing test files
 
-### Code Formatting - MANDATORY
-
-**ALWAYS run code formatting before committing:**
-```bash
-make format     # Formats all Go code with gofmt and goimports
-make fmt        # Alias for format
-```
-
-**Check formatting (CI runs this):**
-```bash
-make check-format
-```
-
-The CI pipeline includes a formatting check that will fail if code is not properly formatted.
 
 ### Code Organization
 
@@ -132,25 +118,53 @@ The CI pipeline includes a formatting check that will fail if code is not proper
 - Guide users to solutions (e.g., "run 'gitlab-cli config' first")
 - Handle network issues, authentication failures, and git errors gracefully
 
-### Code Style - MANDATORY FORMATTING
+### Code Quality - MANDATORY CHECKS
 
-**CRITICAL**: All code must be properly formatted before committing. The CI pipeline will fail if code is not formatted.
+**CRITICAL**: All code changes must pass the following quality checks before submission. This is non-negotiable.
 
-**ALWAYS run formatting after making changes:**
+**ALWAYS run ALL quality checks after making ANY change:**
 ```bash
-make format    # or make fmt
+make test      # Run all tests - MUST pass
+make format    # Format all code - MANDATORY  
+make lint      # Run linting - MUST pass with zero issues
+
+# OR use the convenient combined command:
+make quality   # Runs test + format + lint automatically
 ```
 
-**To check formatting (CI command):**
+**Quality Check Requirements:**
+
+1. **Testing (MANDATORY)**:
+   - ALL tests must pass: `make test`
+   - No test failures or errors allowed
+   - Tests cover all new functionality and edge cases
+   - Test coverage must be maintained or improved
+
+2. **Code Formatting (MANDATORY)**:
+   - **gofmt**: All Go code must pass `gofmt -l .` (no output = properly formatted)
+   - **goimports**: All import statements must be properly organized and formatted
+   - Use `make format` to auto-fix formatting issues
+   - Check formatting: `make check-format`
+
+3. **Linting (MANDATORY)**:
+   - **golangci-lint**: All code must pass `make lint` with ZERO issues
+   - No linting errors, warnings, or suggestions allowed
+   - Fix all issues before proceeding - no exceptions
+   - Common issues: unused variables, ineffectual assignments, error handling
+
+**Workflow for ANY Code Change:**
 ```bash
-make check-format
+# 1. Make your changes
+# 2. ALWAYS run the quality checks:
+make quality   # ← Runs test + format + lint (RECOMMENDED)
+# OR run individually:
+make test      # ← Must pass
+make format    # ← Must run  
+make lint      # ← Must pass with zero issues
+# 3. Only then commit/submit
 ```
 
-**Formatting Requirements:**
-- **gofmt**: All Go code must pass `gofmt -l .` (no output = properly formatted)
-- **goimports**: All import statements must be properly organized and formatted
-- The CI pipeline runs `make check-format` and will fail if formatting is incorrect
-- Use `make format` before committing to ensure compliance
+**Failure to follow this process will result in rejected changes.**
 
 **General Code Style:**
 - Follow standard Go conventions
@@ -212,11 +226,14 @@ make check-format
 
 ## When Working on This Project
 
-1. **ALWAYS format code using `make format`** before any commits - CI will fail otherwise
-2. **Always test using `make test`** - never use `go test ./...`
-3. **Build using `make build`** for consistency
-4. **Check formatting with `make check-format`** before pushing
-5. **Update README.md** if adding new features or changing behavior
-6. **Consider security implications** especially for token handling
-7. **Maintain the clean architecture** with separate concerns in `internal/` packages
-8. **Test edge cases** like network failures, invalid configs, missing git repos
+1. **MANDATORY: Run quality checks after EVERY change**: `make quality` (or `make test && make format && make lint`)
+2. **All tests must pass**: Use `make test` (never `go test ./...`)
+3. **Zero linting issues**: `make lint` must pass with no errors, warnings, or suggestions
+4. **Code must be formatted**: `make format` before any commits
+5. **Build using `make build`** for consistency
+6. **Update README.md** if adding new features or changing behavior
+7. **Consider security implications** especially for token handling
+8. **Maintain the clean architecture** with separate concerns in `internal/` packages
+9. **Test edge cases** like network failures, invalid configs, missing git repos
+
+**Remember: `make quality` = MANDATORY for every code change**

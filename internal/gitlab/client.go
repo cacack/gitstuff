@@ -6,29 +6,16 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/xanzy/go-gitlab"
+
+	"gitstuff/internal/scm"
 )
 
 type Client struct {
 	client *gitlab.Client
-}
-
-type Repository struct {
-	ID            int
-	Name          string
-	FullPath      string
-	CloneURL      string
-	SSHCloneURL   string
-	DefaultBranch string
-	WebURL        string
-}
-
-type Group struct {
-	ID       int
-	Name     string
-	FullPath string
 }
 
 func NewClient(baseURL, token string, insecure bool) (*Client, error) {
@@ -80,12 +67,16 @@ func normalizeURL(baseURL string) (string, error) {
 	return parsedURL.String(), nil
 }
 
-func (c *Client) ListAllRepositories() ([]*Repository, error) {
+func (c *Client) GetProviderType() string {
+	return "gitlab"
+}
+
+func (c *Client) ListAllRepositories() ([]*scm.Repository, error) {
 	return c.ListRepositoriesInGroup("")
 }
 
-func (c *Client) ListRepositoriesInGroup(groupPath string) ([]*Repository, error) {
-	var allRepos []*Repository
+func (c *Client) ListRepositoriesInGroup(groupPath string) ([]*scm.Repository, error) {
+	var allRepos []*scm.Repository
 
 	if groupPath != "" {
 		return c.listRepositoriesInSpecificGroup(groupPath)
@@ -109,14 +100,15 @@ func (c *Client) ListRepositoriesInGroup(groupPath string) ([]*Repository, error
 		}
 
 		for _, project := range projects {
-			repo := &Repository{
-				ID:            project.ID,
+			repo := &scm.Repository{
+				ID:            strconv.Itoa(project.ID),
 				Name:          project.Name,
 				FullPath:      project.PathWithNamespace,
 				CloneURL:      project.HTTPURLToRepo,
 				SSHCloneURL:   project.SSHURLToRepo,
 				DefaultBranch: project.DefaultBranch,
 				WebURL:        project.WebURL,
+				Provider:      "gitlab",
 			}
 			allRepos = append(allRepos, repo)
 		}
@@ -134,25 +126,26 @@ func (c *Client) ListRepositoriesInGroup(groupPath string) ([]*Repository, error
 	return allRepos, nil
 }
 
-func (c *Client) GetRepository(fullPath string) (*Repository, error) {
+func (c *Client) GetRepository(fullPath string) (*scm.Repository, error) {
 	project, _, err := c.client.Projects.GetProject(fullPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project %s: %w", fullPath, err)
 	}
 
-	return &Repository{
-		ID:            project.ID,
+	return &scm.Repository{
+		ID:            strconv.Itoa(project.ID),
 		Name:          project.Name,
 		FullPath:      project.PathWithNamespace,
 		CloneURL:      project.HTTPURLToRepo,
 		SSHCloneURL:   project.SSHURLToRepo,
 		DefaultBranch: project.DefaultBranch,
 		WebURL:        project.WebURL,
+		Provider:      "gitlab",
 	}, nil
 }
 
-func (c *Client) ListGroups() ([]*Group, error) {
-	var allGroups []*Group
+func (c *Client) ListGroups() ([]*scm.Group, error) {
+	var allGroups []*scm.Group
 
 	opts := &gitlab.ListGroupsOptions{
 		ListOptions: gitlab.ListOptions{
@@ -171,10 +164,11 @@ func (c *Client) ListGroups() ([]*Group, error) {
 		}
 
 		for _, group := range groups {
-			g := &Group{
-				ID:       group.ID,
+			g := &scm.Group{
+				ID:       strconv.Itoa(group.ID),
 				Name:     group.Name,
 				FullPath: group.FullPath,
+				Provider: "gitlab",
 			}
 			allGroups = append(allGroups, g)
 		}
@@ -188,26 +182,17 @@ func (c *Client) ListGroups() ([]*Group, error) {
 	return allGroups, nil
 }
 
-type RepositoryTree struct {
-	Groups       map[string]*GroupNode
-	Repositories []*Repository
-}
+// Note: These types are now defined in scm package but kept here for BuildRepositoryTree compatibility
 
-type GroupNode struct {
-	Group        *Group
-	SubGroups    map[string]*GroupNode
-	Repositories []*Repository
-}
-
-func (c *Client) BuildRepositoryTree() (*RepositoryTree, error) {
+func (c *Client) BuildRepositoryTree() (*scm.RepositoryTree, error) {
 	repos, err := c.ListAllRepositories()
 	if err != nil {
 		return nil, err
 	}
 
-	tree := &RepositoryTree{
-		Groups:       make(map[string]*GroupNode),
-		Repositories: []*Repository{},
+	tree := &scm.RepositoryTree{
+		Groups:       make(map[string]*scm.GroupNode),
+		Repositories: []*scm.Repository{},
 	}
 
 	for _, repo := range repos {
@@ -218,31 +203,35 @@ func (c *Client) BuildRepositoryTree() (*RepositoryTree, error) {
 		}
 
 		current := tree.Groups
-		var currentNode *GroupNode
+		var currentNode *scm.GroupNode
 
 		for i, part := range parts[:len(parts)-1] {
 			if currentNode == nil {
 				if _, exists := current[part]; !exists {
-					current[part] = &GroupNode{
-						Group: &Group{
+					current[part] = &scm.GroupNode{
+						Group: &scm.Group{
+							ID:       part,
 							Name:     part,
 							FullPath: strings.Join(parts[:i+1], "/"),
+							Provider: "gitlab",
 						},
-						SubGroups:    make(map[string]*GroupNode),
-						Repositories: []*Repository{},
+						SubGroups:    make(map[string]*scm.GroupNode),
+						Repositories: []*scm.Repository{},
 					}
 				}
 				currentNode = current[part]
 				current = currentNode.SubGroups
 			} else {
 				if _, exists := current[part]; !exists {
-					current[part] = &GroupNode{
-						Group: &Group{
+					current[part] = &scm.GroupNode{
+						Group: &scm.Group{
+							ID:       part,
 							Name:     part,
 							FullPath: strings.Join(parts[:i+1], "/"),
+							Provider: "gitlab",
 						},
-						SubGroups:    make(map[string]*GroupNode),
-						Repositories: []*Repository{},
+						SubGroups:    make(map[string]*scm.GroupNode),
+						Repositories: []*scm.Repository{},
 					}
 				}
 				currentNode = current[part]
@@ -258,8 +247,8 @@ func (c *Client) BuildRepositoryTree() (*RepositoryTree, error) {
 	return tree, nil
 }
 
-func (c *Client) listRepositoriesInSpecificGroup(groupPath string) ([]*Repository, error) {
-	var allRepos []*Repository
+func (c *Client) listRepositoriesInSpecificGroup(groupPath string) ([]*scm.Repository, error) {
+	var allRepos []*scm.Repository
 
 	group, _, err := c.client.Groups.GetGroup(groupPath, nil)
 	if err != nil {
@@ -284,14 +273,15 @@ func (c *Client) listRepositoriesInSpecificGroup(groupPath string) ([]*Repositor
 
 		for _, project := range projects {
 			if strings.HasPrefix(project.PathWithNamespace, groupPath+"/") || project.PathWithNamespace == groupPath {
-				repo := &Repository{
-					ID:            project.ID,
+				repo := &scm.Repository{
+					ID:            strconv.Itoa(project.ID),
 					Name:          project.Name,
 					FullPath:      project.PathWithNamespace,
 					CloneURL:      project.HTTPURLToRepo,
 					SSHCloneURL:   project.SSHURLToRepo,
 					DefaultBranch: project.DefaultBranch,
 					WebURL:        project.WebURL,
+					Provider:      "gitlab",
 				}
 				allRepos = append(allRepos, repo)
 			}

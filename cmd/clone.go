@@ -3,19 +3,21 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"gitstuff/internal/config"
 	"gitstuff/internal/git"
-	"gitstuff/internal/gitlab"
+	"gitstuff/internal/scm"
 
 	"github.com/spf13/cobra"
 )
 
 var cloneCmd = &cobra.Command{
 	Use:   "clone [repository-path]",
-	Short: "Clone GitLab repositories",
-	Long: `Clone a specific GitLab repository or all repositories.
-If no repository path is provided, all repositories will be cloned.`,
+	Short: "Clone repositories from configured SCM providers",
+	Long: `Clone a specific repository or all repositories from configured providers.
+If no repository path is provided, all repositories will be cloned.
+Repository path format: 'owner/repo' (searches all providers)`,
 	RunE: runClone,
 }
 
@@ -32,9 +34,18 @@ func runClone(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load config: %w (run 'gitstuff config' first)", err)
 	}
 
-	client, err := gitlab.NewClient(cfg.GitLab.URL, cfg.GitLab.Token, cfg.GitLab.Insecure)
-	if err != nil {
-		return err
+	if len(cfg.Providers) == 0 {
+		return fmt.Errorf("no providers configured")
+	}
+
+	// Create clients for all providers
+	clients := make([]scm.Client, 0, len(cfg.Providers))
+	for _, providerConfig := range cfg.Providers {
+		client, err := createClient(providerConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create client for provider %s: %w", providerConfig.Name, err)
+		}
+		clients = append(clients, client)
 	}
 
 	cloneAll, _ := cmd.Flags().GetBool("all")
@@ -42,27 +53,34 @@ func runClone(cmd *cobra.Command, args []string) error {
 	update, _ := cmd.Flags().GetBool("update")
 
 	if cloneAll || len(args) == 0 {
-		return cloneAllRepositories(client, cfg, useSSH, update)
+		return cloneAllRepositories(clients, cfg, useSSH, update)
 	}
 
-	return cloneSingleRepository(client, cfg, args[0], useSSH, update)
+	return cloneSingleRepository(clients, cfg, args[0], useSSH, update)
 }
 
-func cloneAllRepositories(client *gitlab.Client, cfg *config.Config, useSSH, update bool) error {
-	repos, err := client.ListAllRepositories()
-	if err != nil {
-		return err
+func cloneAllRepositories(clients []scm.Client, cfg *config.Config, useSSH, update bool) error {
+	var allRepos []*scm.Repository
+
+	// Collect all repositories from all providers
+	for _, client := range clients {
+		repos, err := client.ListAllRepositories()
+		if err != nil {
+			fmt.Printf("❌ Error getting repositories from %s provider: %v\n", client.GetProviderType(), err)
+			continue
+		}
+		allRepos = append(allRepos, repos...)
 	}
 
-	fmt.Printf("Found %d repositories to clone/update\n\n", len(repos))
+	fmt.Printf("Found %d repositories to clone/update\n\n", len(allRepos))
 
 	successful := 0
 	failed := 0
 
-	for i, repo := range repos {
-		fmt.Printf("[%d/%d] Processing %s...\n", i+1, len(repos), repo.FullPath)
+	for i, repo := range allRepos {
+		fmt.Printf("[%d/%d] Processing %s [%s]...\n", i+1, len(allRepos), repo.FullPath, repo.Provider)
 
-		localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
+		localPath := filepath.Join(cfg.Local.BaseDir, repo.Provider, repo.FullPath)
 		status, err := git.GetRepositoryStatus(localPath)
 		if err != nil {
 			fmt.Printf("❌ Error checking status: %v\n\n", err)
@@ -106,15 +124,26 @@ func cloneAllRepositories(client *gitlab.Client, cfg *config.Config, useSSH, upd
 	return nil
 }
 
-func cloneSingleRepository(client *gitlab.Client, cfg *config.Config, repoPath string, useSSH, update bool) error {
-	repo, err := client.GetRepository(repoPath)
-	if err != nil {
-		return err
+func cloneSingleRepository(clients []scm.Client, cfg *config.Config, repoPath string, useSSH, update bool) error {
+	// Search for the repository across all providers
+	var foundRepo *scm.Repository
+
+	for _, client := range clients {
+		// Try to find the repository in this provider
+		repo, err := findRepositoryByPath(client, repoPath)
+		if err == nil && repo != nil {
+			foundRepo = repo
+			break
+		}
 	}
 
-	fmt.Printf("Processing repository: %s\n", repo.FullPath)
+	if foundRepo == nil {
+		return fmt.Errorf("repository '%s' not found in any configured provider", repoPath)
+	}
 
-	localPath := filepath.Join(cfg.Local.BaseDir, repo.FullPath)
+	fmt.Printf("Found repository: %s [%s]\n", foundRepo.FullPath, foundRepo.Provider)
+
+	localPath := filepath.Join(cfg.Local.BaseDir, foundRepo.Provider, foundRepo.FullPath)
 	status, err := git.GetRepositoryStatus(localPath)
 	if err != nil {
 		return fmt.Errorf("error checking repository status: %w", err)
@@ -138,9 +167,9 @@ func cloneSingleRepository(client *gitlab.Client, cfg *config.Config, repoPath s
 		return fmt.Errorf("directory %s exists but is not a git repository", localPath)
 	}
 
-	cloneURL := repo.CloneURL
+	cloneURL := foundRepo.CloneURL
 	if useSSH {
-		cloneURL = repo.SSHCloneURL
+		cloneURL = foundRepo.SSHCloneURL
 	}
 
 	fmt.Printf("📥 Cloning from %s to %s...\n", cloneURL, localPath)
@@ -150,4 +179,22 @@ func cloneSingleRepository(client *gitlab.Client, cfg *config.Config, repoPath s
 
 	fmt.Printf("✅ Repository cloned successfully\n")
 	return nil
+}
+
+// findRepositoryByPath searches for a repository by its path (owner/repo format)
+func findRepositoryByPath(client scm.Client, repoPath string) (*scm.Repository, error) {
+	// Get all repositories from this provider
+	repos, err := client.ListAllRepositories()
+	if err != nil {
+		return nil, err
+	}
+
+	// Search for exact match or partial match
+	for _, repo := range repos {
+		if repo.FullPath == repoPath || strings.HasSuffix(repo.FullPath, repoPath) {
+			return repo, nil
+		}
+	}
+
+	return nil, fmt.Errorf("repository not found")
 }
