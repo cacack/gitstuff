@@ -1,14 +1,16 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
+
+	"gitstuff/internal/verbosity"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var cfgFile string
+var verboseCount int
 
 var rootCmd = &cobra.Command{
 	Use:   "gitstuff",
@@ -28,6 +30,11 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gitstuff.yaml)")
+	rootCmd.PersistentFlags().CountVarP(&verboseCount, "verbose", "v", "verbose output (use -v, -vv, -vvv for increasing levels)")
+
+	cobra.OnInitialize(func() {
+		verbosity.SetFromCount(verboseCount)
+	})
 }
 
 func initConfig() {
@@ -46,6 +53,6 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+		verbosity.Debug("Using config file: %s", viper.ConfigFileUsed())
 	}
 }

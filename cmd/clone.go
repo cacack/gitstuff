@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gitstuff/internal/config"
 	"gitstuff/internal/git"
 	"gitstuff/internal/scm"
+	"gitstuff/internal/verbosity"
 
 	"github.com/spf13/cobra"
 )
@@ -37,10 +39,14 @@ func init() {
 }
 
 func runClone(cmd *cobra.Command, args []string) error {
+	start := time.Now()
+	verbosity.Debug("Starting clone operation with args: %v", args)
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w (run 'gitstuff config' first)", err)
 	}
+	verbosity.Debug("Loaded configuration with %d providers", len(cfg.Providers))
 
 	if len(cfg.Providers) == 0 {
 		return fmt.Errorf("no providers configured")
@@ -49,6 +55,7 @@ func runClone(cmd *cobra.Command, args []string) error {
 	// Create clients for all providers
 	clients := make([]scm.Client, 0, len(cfg.Providers))
 	for _, providerConfig := range cfg.Providers {
+		verbosity.Debug("Creating client for provider: %s (%s)", providerConfig.Name, providerConfig.Type)
 		client, err := createClient(providerConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create client for provider %s: %w", providerConfig.Name, err)
@@ -61,48 +68,73 @@ func runClone(cmd *cobra.Command, args []string) error {
 	useHTTPS, _ := cmd.Flags().GetBool("https")
 	update, _ := cmd.Flags().GetBool("update")
 
+	verbosity.Debug("Clone flags: all=%t, ssh=%t, https=%t, update=%t", cloneAll, useSSH, useHTTPS, update)
+
 	// If --https is explicitly set, override SSH default
 	if useHTTPS {
 		useSSH = false
+		verbosity.Debug("Using HTTPS for cloning (SSH disabled)")
+	} else {
+		verbosity.Debug("Using SSH for cloning")
 	}
 
 	if cloneAll && len(args) == 0 {
-		return cloneAllRepositories(clients, cfg, useSSH, update)
+		verbosity.Info("Cloning all repositories from all providers")
+		result := cloneAllRepositories(clients, cfg, useSSH, update)
+		verbosity.DebugTiming(start, "Clone all operation completed")
+		return result
 	}
 
 	if cloneAll && len(args) == 1 {
-		return cloneGroupRepositories(clients, cfg, args[0], useSSH, update)
+		verbosity.Info("Cloning all repositories in group: %s", args[0])
+		result := cloneGroupRepositories(clients, cfg, args[0], useSSH, update)
+		verbosity.DebugTiming(start, "Clone group operation completed")
+		return result
 	}
 
 	if len(args) == 0 {
-		return cloneAllRepositories(clients, cfg, useSSH, update)
+		verbosity.Info("No specific repository specified, cloning all repositories")
+		result := cloneAllRepositories(clients, cfg, useSSH, update)
+		verbosity.DebugTiming(start, "Clone all operation completed")
+		return result
 	}
 
-	return cloneSingleRepository(clients, cfg, args[0], useSSH, update)
+	verbosity.Info("Cloning single repository: %s", args[0])
+	result := cloneSingleRepository(clients, cfg, args[0], useSSH, update)
+	verbosity.DebugTiming(start, "Clone single operation completed")
+	return result
 }
 
 func cloneAllRepositories(clients []scm.Client, cfg *config.Config, useSSH, update bool) error {
+	start := time.Now()
+	verbosity.Debug("Collecting repositories from %d providers", len(clients))
 	var allRepos []*scm.Repository
 
 	// Collect all repositories from all providers
 	for _, client := range clients {
+		clientStart := time.Now()
+		verbosity.Debug("Fetching repositories from %s provider", client.GetProviderType())
 		repos, err := client.ListAllRepositories()
 		if err != nil {
 			fmt.Printf("❌ Error getting repositories from %s provider: %v\n", client.GetProviderType(), err)
 			continue
 		}
+		verbosity.DebugTiming(clientStart, "Fetched %d repositories from %s provider", len(repos), client.GetProviderType())
 		allRepos = append(allRepos, repos...)
 	}
 
+	verbosity.DebugTiming(start, "Repository collection completed")
 	fmt.Printf("Found %d repositories to clone/update\n\n", len(allRepos))
 
 	successful := 0
 	failed := 0
 
 	for i, repo := range allRepos {
+		repoStart := time.Now()
 		fmt.Printf("[%d/%d] Processing %s [%s]...\n", i+1, len(allRepos), repo.FullPath, repo.Provider)
 
 		localPath := filepath.Join(cfg.Local.BaseDir, repo.Provider, repo.FullPath)
+		verbosity.Debug("Checking repository status at: %s", localPath)
 		status, err := git.GetRepositoryStatus(localPath)
 		if err != nil {
 			fmt.Printf("❌ Error checking status: %v\n\n", err)
@@ -112,18 +144,23 @@ func cloneAllRepositories(clients []scm.Client, cfg *config.Config, useSSH, upda
 
 		if status.Exists && status.IsGitRepo {
 			if update {
+				verbosity.Debug("Repository exists, pulling latest changes")
 				fmt.Printf("🔄 Pulling latest changes...\n")
+				pullStart := time.Now()
 				if err := git.PullRepository(localPath); err != nil {
 					fmt.Printf("❌ Failed to pull: %v\n\n", err)
 					failed++
 				} else {
+					verbosity.DebugTiming(pullStart, "Pull completed for %s", repo.FullPath)
 					fmt.Printf("✅ Updated successfully\n\n")
 					successful++
 				}
 			} else {
+				verbosity.Debug("Repository already exists, skipping (no update flag)")
 				fmt.Printf("⏭️  Already cloned (use --update to pull latest changes)\n\n")
 				successful++
 			}
+			verbosity.DebugTiming(repoStart, "Processed existing repository: %s", repo.FullPath)
 			continue
 		}
 
@@ -132,14 +169,18 @@ func cloneAllRepositories(clients []scm.Client, cfg *config.Config, useSSH, upda
 			cloneURL = repo.SSHCloneURL
 		}
 
+		verbosity.Debug("Cloning repository using %s protocol: %s", map[bool]string{true: "SSH", false: "HTTPS"}[useSSH], cloneURL)
 		fmt.Printf("📥 Cloning from %s...\n", cloneURL)
+		cloneStart := time.Now()
 		if err := git.CloneRepository(cloneURL, localPath, useSSH); err != nil {
 			fmt.Printf("❌ Failed to clone: %v\n\n", err)
 			failed++
 		} else {
+			verbosity.DebugTiming(cloneStart, "Clone completed for %s", repo.FullPath)
 			fmt.Printf("✅ Cloned successfully\n\n")
 			successful++
 		}
+		verbosity.DebugTiming(repoStart, "Processed new repository: %s", repo.FullPath)
 	}
 
 	fmt.Printf("Summary: %d successful, %d failed\n", successful, failed)
@@ -171,9 +212,11 @@ func cloneGroupRepositories(clients []scm.Client, cfg *config.Config, groupPath 
 	failed := 0
 
 	for i, repo := range allRepos {
+		repoStart := time.Now()
 		fmt.Printf("[%d/%d] Processing %s [%s]...\n", i+1, len(allRepos), repo.FullPath, repo.Provider)
 
 		localPath := filepath.Join(cfg.Local.BaseDir, repo.Provider, repo.FullPath)
+		verbosity.Debug("Checking repository status at: %s", localPath)
 		status, err := git.GetRepositoryStatus(localPath)
 		if err != nil {
 			fmt.Printf("❌ Error checking status: %v\n\n", err)
@@ -183,18 +226,23 @@ func cloneGroupRepositories(clients []scm.Client, cfg *config.Config, groupPath 
 
 		if status.Exists && status.IsGitRepo {
 			if update {
+				verbosity.Debug("Repository exists, pulling latest changes")
 				fmt.Printf("🔄 Pulling latest changes...\n")
+				pullStart := time.Now()
 				if err := git.PullRepository(localPath); err != nil {
 					fmt.Printf("❌ Failed to pull: %v\n\n", err)
 					failed++
 				} else {
+					verbosity.DebugTiming(pullStart, "Pull completed for %s", repo.FullPath)
 					fmt.Printf("✅ Updated successfully\n\n")
 					successful++
 				}
 			} else {
+				verbosity.Debug("Repository already exists, skipping (no update flag)")
 				fmt.Printf("⏭️  Already cloned (use --update to pull latest changes)\n\n")
 				successful++
 			}
+			verbosity.DebugTiming(repoStart, "Processed existing repository: %s", repo.FullPath)
 			continue
 		}
 
@@ -203,14 +251,18 @@ func cloneGroupRepositories(clients []scm.Client, cfg *config.Config, groupPath 
 			cloneURL = repo.SSHCloneURL
 		}
 
+		verbosity.Debug("Cloning repository using %s protocol: %s", map[bool]string{true: "SSH", false: "HTTPS"}[useSSH], cloneURL)
 		fmt.Printf("📥 Cloning from %s...\n", cloneURL)
+		cloneStart := time.Now()
 		if err := git.CloneRepository(cloneURL, localPath, useSSH); err != nil {
 			fmt.Printf("❌ Failed to clone: %v\n\n", err)
 			failed++
 		} else {
+			verbosity.DebugTiming(cloneStart, "Clone completed for %s", repo.FullPath)
 			fmt.Printf("✅ Cloned successfully\n\n")
 			successful++
 		}
+		verbosity.DebugTiming(repoStart, "Processed new repository: %s", repo.FullPath)
 	}
 
 	fmt.Printf("Summary: %d successful, %d failed\n", successful, failed)

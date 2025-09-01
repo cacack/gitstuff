@@ -187,8 +187,14 @@ gitstuff list
 # Tree view with group/organization structure (organized by provider)
 gitstuff list --tree
 
-# Show additional details like URLs
-gitstuff list --verbose
+# Show additional details like URLs (info level)
+gitstuff list -v
+
+# Show debug information with timing
+gitstuff list -vv
+
+# Maximum verbosity with trace information
+gitstuff list -vvv
 
 # List without status information
 gitstuff list --status=false
@@ -279,6 +285,32 @@ local:
   base_dir: "/path/to/gitstuff-repos"
 ```
 
+## Verbosity Levels
+
+GitStuff supports multiple verbosity levels using the `-v` flag. Each additional `-v` increases the detail level:
+
+- **Normal (default)**: Essential output only
+- **`-v` (Info)**: Shows additional details like repository URLs
+- **`-vv` (Debug)**: Shows API call timing, internal processing details, and configuration info
+- **`-vvv` (Trace)**: Maximum detail including all debug info plus trace-level logging
+
+**Examples:**
+```bash
+# Normal output
+gitstuff list
+
+# Show repository URLs and additional info
+gitstuff list -v
+
+# Show debug information with API timing
+gitstuff clone --all -vv
+
+# Maximum verbosity for troubleshooting
+gitstuff config -vvv
+```
+
+The verbosity setting applies globally to all commands and can help with troubleshooting connection issues, understanding performance, and debugging configuration problems.
+
 ## Commands Reference
 
 ### `gitstuff config`
@@ -303,7 +335,7 @@ List repositories from all configured providers with status information.
 
 - `-t, --tree`: Display in tree structure organized by provider and groups/organizations
 - `-s, --status`: Show local repository status (default: true)
-- `-v, --verbose`: Show additional details like URLs
+- `-v, --verbose`: Increase verbosity (use -v, -vv, -vvv for info, debug, trace levels)
 - `-g, --group`: Filter repositories to only those in the specified group/organization
 
 ### `gitstuff clone`

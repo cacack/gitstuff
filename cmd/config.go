@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"gitstuff/internal/config"
+	"gitstuff/internal/verbosity"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -40,6 +41,12 @@ func runConfig(cmd *cobra.Command, args []string) error {
 	baseDir, _ := cmd.Flags().GetString("base-dir")
 	insecure, _ := cmd.Flags().GetBool("insecure")
 	group, _ := cmd.Flags().GetString("group")
+
+	if providerType != "" {
+		verbosity.Debug("Running config in non-interactive mode for provider: %s", providerType)
+	} else {
+		verbosity.Debug("Running config in interactive mode")
+	}
 
 	reader := bufio.NewReader(os.Stdin)
 
