@@ -10,6 +10,7 @@ import (
 	"gitstuff/internal/config"
 	"gitstuff/internal/git"
 	"gitstuff/internal/scm"
+	"gitstuff/internal/verbosity"
 )
 
 func captureOutput(f func()) string {
@@ -88,7 +89,7 @@ func TestDisplayRepositoryList_WithoutVerbose(t *testing.T) {
 	clients := []scm.Client{mockClient}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryList(clients, cfg, false, false, "")
+		_ = displayRepositoryList(clients, cfg, false, "")
 	})
 
 	// Check output contains repository names
@@ -131,7 +132,11 @@ func TestDisplayRepositoryList_WithVerbose(t *testing.T) {
 	clients := []scm.Client{mockClient}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryList(clients, cfg, false, true, "")
+		// Set verbosity to Info level to show URLs
+		verbosity.SetLevel(verbosity.InfoLevel)
+		_ = displayRepositoryList(clients, cfg, false, "")
+		// Reset verbosity to Normal after test
+		verbosity.SetLevel(verbosity.Normal)
 	})
 
 	// Check output contains both Web and SSH URLs when verbose
@@ -216,7 +221,7 @@ func TestDisplayRepositoryTree_MultipleProviders(t *testing.T) {
 	clients := []scm.Client{gitlabClient, githubClient}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryTree(clients, cfg, false, false, "")
+		_ = displayRepositoryTree(clients, cfg, false, "")
 	})
 
 	// Check output contains both providers
@@ -278,7 +283,11 @@ func TestDisplayRepositoryTree_WithVerbose(t *testing.T) {
 	clients := []scm.Client{gitlabClient}
 
 	output := captureOutput(func() {
-		_ = displayRepositoryTree(clients, cfg, false, true, "")
+		// Set verbosity to Info level to show URLs
+		verbosity.SetLevel(verbosity.InfoLevel)
+		_ = displayRepositoryTree(clients, cfg, false, "")
+		// Reset verbosity to Normal after test
+		verbosity.SetLevel(verbosity.Normal)
 	})
 
 	// Check output contains both Web and SSH URLs when verbose in tree mode

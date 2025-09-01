@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gitstuff/internal/config"
 	"gitstuff/internal/git"
 	"gitstuff/internal/github"
 	"gitstuff/internal/gitlab"
 	"gitstuff/internal/scm"
+	"gitstuff/internal/verbosity"
 
 	"github.com/spf13/cobra"
 )
@@ -37,7 +39,6 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 	listCmd.Flags().BoolP("tree", "t", false, "Display repositories in tree structure with groups")
 	listCmd.Flags().BoolP("status", "s", true, "Show local repository status")
-	listCmd.Flags().BoolP("verbose", "v", false, "Show additional details like URLs")
 	listCmd.Flags().StringP("group", "g", "", "Filter repositories to only those in the specified group")
 }
 
@@ -59,7 +60,6 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	showTree, _ := cmd.Flags().GetBool("tree")
 	showStatus, _ := cmd.Flags().GetBool("status")
-	showVerbose, _ := cmd.Flags().GetBool("verbose")
 	groupFilter, _ := cmd.Flags().GetString("group")
 
 	// Use group from flag first, then from any provider config, then empty string
@@ -74,38 +74,52 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	if showTree {
-		return displayRepositoryTree(clients, cfg, showStatus, showVerbose, targetGroup)
+		return displayRepositoryTree(clients, cfg, showStatus, targetGroup)
 	} else {
-		return displayRepositoryList(clients, cfg, showStatus, showVerbose, targetGroup)
+		return displayRepositoryList(clients, cfg, showStatus, targetGroup)
 	}
 }
 
-func displayRepositoryList(clients []scm.Client, cfg *config.Config, showStatus, showVerbose bool, groupFilter string) error {
+func displayRepositoryList(clients []scm.Client, cfg *config.Config, showStatus bool, groupFilter string) error {
+	start := time.Now()
+	verbosity.Debug("Starting repository list from %d providers", len(clients))
+
 	var allRepos []*scm.Repository
 
 	for _, client := range clients {
 		var repos []*scm.Repository
 		var err error
 
+		clientStart := time.Now()
 		if groupFilter != "" {
+			verbosity.Debug("Fetching repositories from %s provider in group: %s", client.GetProviderType(), groupFilter)
 			repos, err = client.ListRepositoriesInGroup(groupFilter)
 		} else {
+			verbosity.Debug("Fetching all repositories from %s provider", client.GetProviderType())
 			repos, err = client.ListAllRepositories()
 		}
 		if err != nil {
 			return fmt.Errorf("error from %s provider: %w", client.GetProviderType(), err)
 		}
+		verbosity.DebugTiming(clientStart, "Fetched %d repositories from %s provider", len(repos), client.GetProviderType())
 		allRepos = append(allRepos, repos...)
 	}
 
+	verbosity.DebugTiming(start, "Repository discovery completed")
 	fmt.Printf("Found %d repositories:\n\n", len(allRepos))
 
 	for _, repo := range allRepos {
 		fmt.Printf("📁 [%s] %s\n", repo.Provider, repo.FullPath)
 
-		if showVerbose {
+		if verbosity.IsEnabled(verbosity.InfoLevel) {
 			fmt.Printf("   Web URL: %s\n", repo.WebURL)
 			fmt.Printf("   SSH URL: %s\n", repo.SSHCloneURL)
+		}
+
+		if verbosity.IsEnabled(verbosity.DebugLevel) {
+			fmt.Printf("   Clone URL: %s\n", repo.CloneURL)
+			fmt.Printf("   Default Branch: %s\n", repo.DefaultBranch)
+			fmt.Printf("   Provider: %s\n", repo.Provider)
 		}
 
 		if showStatus {
@@ -124,7 +138,7 @@ func displayRepositoryList(clients []scm.Client, cfg *config.Config, showStatus,
 	return nil
 }
 
-func displayRepositoryTree(clients []scm.Client, cfg *config.Config, showStatus, showVerbose bool, groupFilter string) error {
+func displayRepositoryTree(clients []scm.Client, cfg *config.Config, showStatus bool, groupFilter string) error {
 	fmt.Println("Repository tree structure:")
 
 	for _, client := range clients {
@@ -138,7 +152,7 @@ func displayRepositoryTree(clients []scm.Client, cfg *config.Config, showStatus,
 
 		if groupFilter != "" {
 			fmt.Printf("(filtered by group: %s)\n", groupFilter)
-			displayFilteredTree(tree, groupFilter, cfg, showStatus, showVerbose, client.GetProviderType())
+			displayFilteredTree(tree, groupFilter, cfg, showStatus, client.GetProviderType())
 		} else {
 			if len(tree.Repositories) > 0 {
 				fmt.Println("Root repositories:")
@@ -157,7 +171,7 @@ func displayRepositoryTree(clients []scm.Client, cfg *config.Config, showStatus,
 
 					fmt.Println(repoLine)
 
-					if showVerbose {
+					if verbosity.IsEnabled(verbosity.InfoLevel) {
 						fmt.Printf("   Web URL: %s\n", repo.WebURL)
 						fmt.Printf("   SSH URL: %s\n", repo.SSHCloneURL)
 					}
@@ -165,7 +179,7 @@ func displayRepositoryTree(clients []scm.Client, cfg *config.Config, showStatus,
 			}
 
 			for groupName, groupNode := range tree.Groups {
-				displayGroup(groupNode, 0, cfg, showStatus, showVerbose)
+				displayGroup(groupNode, 0, cfg, showStatus)
 				_ = groupName
 			}
 		}
@@ -174,10 +188,10 @@ func displayRepositoryTree(clients []scm.Client, cfg *config.Config, showStatus,
 	return nil
 }
 
-func displayFilteredTree(tree *scm.RepositoryTree, groupFilter string, cfg *config.Config, showStatus, showVerbose bool, providerType string) {
+func displayFilteredTree(tree *scm.RepositoryTree, groupFilter string, cfg *config.Config, showStatus bool, providerType string) {
 	targetGroup := findGroupInTree(tree, groupFilter)
 	if targetGroup != nil {
-		displayGroup(targetGroup, 0, cfg, showStatus, showVerbose)
+		displayGroup(targetGroup, 0, cfg, showStatus)
 	} else {
 		fmt.Printf("Group '%s' not found in %s\n", groupFilter, providerType)
 	}
@@ -201,7 +215,7 @@ func findGroupInTree(tree *scm.RepositoryTree, groupPath string) *scm.GroupNode 
 	return currentNode
 }
 
-func displayGroup(group *scm.GroupNode, indent int, cfg *config.Config, showStatus, showVerbose bool) {
+func displayGroup(group *scm.GroupNode, indent int, cfg *config.Config, showStatus bool) {
 	prefix := strings.Repeat("  ", indent)
 	fmt.Printf("%s📂 %s/\n", prefix, group.Group.Name)
 
@@ -220,14 +234,14 @@ func displayGroup(group *scm.GroupNode, indent int, cfg *config.Config, showStat
 
 		fmt.Println(repoLine)
 
-		if showVerbose {
+		if verbosity.IsEnabled(verbosity.InfoLevel) {
 			fmt.Printf("%s     Web URL: %s\n", prefix, repo.WebURL)
 			fmt.Printf("%s     SSH URL: %s\n", prefix, repo.SSHCloneURL)
 		}
 	}
 
 	for _, subGroup := range group.SubGroups {
-		displayGroup(subGroup, indent+1, cfg, showStatus, showVerbose)
+		displayGroup(subGroup, indent+1, cfg, showStatus)
 	}
 }
 

@@ -108,11 +108,12 @@ gitstuff/
 Write clear, descriptive commit messages:
 
 ```
-Add verbose flag to list command
+Add multi-level verbosity support
 
-- Hides URLs by default for cleaner output
-- Shows URLs with --verbose/-v flag
-- Maintains backward compatibility
+- Implements counting verbosity flags (-v, -vv, -vvv)
+- Info level shows URLs and additional details
+- Debug level shows API timing and internal processing
+- Trace level provides maximum diagnostic information
 - Includes comprehensive tests
 ```
 
